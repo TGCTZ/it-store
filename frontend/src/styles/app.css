@@ -80,6 +80,8 @@ td small { display: block; color: var(--muted-foreground); margin-top: 3px; }
 .text-button:hover { background: var(--muted); border-color: var(--border-strong); }
 .text-button.destructive { color: #a83232; border-color: #e6aaaa; }
 .text-button.destructive:hover, .icon-delete:hover { background: #fff0ef; border-color: #d98c88; }
+.text-button.return-button { margin-right: 6px; border-color: #a8ddbf; background: #f3fbf6; color: #146243; }
+.text-button.return-button:hover { border-color: #68bd8e; background: #e5f7ed; }
 .text-button.align-start { align-self: flex-start; }
 .row-actions { white-space: nowrap; }
 .detail-actions { display: flex; align-items: center; gap: 10px; }

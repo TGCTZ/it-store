@@ -59,7 +59,7 @@ function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 function statusLabel(value: string) {
-  return value === 'checked_out' ? 'Checked out' : value.replaceAll('_', ' ')
+  return value === 'checked_out' ? 'Checked out' : value === 'out' ? 'Out' : value.replaceAll('_', ' ')
 }
 
 function Badge({ value }: { value: string }) {
@@ -230,14 +230,34 @@ function Checkouts({ revision, reload }: { revision: number; reload: () => void 
   const [page, setPage] = useState(1)
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [returningItem, setReturningItem] = useState<CheckoutItem | null>(null)
+  const [returnedAccessoryIds, setReturnedAccessoryIds] = useState<number[]>([])
+  const [returnBusy, setReturnBusy] = useState(false)
   const { data, error, loading } = usePage<Checkout>(`/checkouts/?page=${page}&q=${encodeURIComponent(q)}&status=${status}`, revision)
+  async function confirmReturn() {
+    if (!returningItem) return
+    setReturnBusy(true)
+    const missingAccessoryIds = returningItem.accessory_snapshot
+      .filter(accessory => !returnedAccessoryIds.includes(accessory.id))
+      .map(accessory => accessory.id)
+    try {
+      await api(`/checkout-items/${returningItem.id}/resolve/`, { method: 'POST', body: JSON.stringify({ outcome: 'returned', missing_accessory_ids: missingAccessoryIds }) })
+      toast(missingAccessoryIds.length
+        ? `${returningItem.asset_name} returned with missing accessories; it needs resolution.`
+        : `${returningItem.asset_name} returned with all listed accessories.`)
+      setReturningItem(null)
+      reload()
+    } catch (reason) { toast(errorMessage(reason instanceof Error ? reason.message : reason), 'error') }
+    finally { setReturnBusy(false) }
+  }
   return <>
     <PageHeader title="Checkouts" description="Track issued items and partial returns." action={<button className="primary" onClick={() => setCreating(true)}><Plus size={17} /> New checkout</button>} />
     <div className="toolbar"><div className="search"><Search size={18} /><input aria-label="Search checkouts" placeholder="Search recipient or phone" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /></div><select aria-label="Filter checkouts" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}><option value="">All checkouts</option><option value="active">Active</option><option value="closed">Closed</option><option value="cancelled">Cancelled</option></select></div>
     {error && <Notice>{error}</Notice>}
-    <div className="panel table-wrap"><table><thead><tr><th>Checkout No</th><th>Full name</th><th>Phone number</th><th>Asset name</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.map(checkout => <tr key={checkout.id}><td className="strong">#{checkout.id}</td><td>{checkout.recipient_first_name} {checkout.recipient_last_name}</td><td>{checkout.recipient_phone}</td><td>{checkout.items.map(item => item.asset_name).join(', ')}</td><td><Badge value={checkout.status} /></td><td><button className="text-button" onClick={() => setSelectedId(checkout.id)}>Open</button></td></tr>)}</tbody></table>{loading && <p className="empty">Loading checkouts…</p>}{!loading && !data?.results.length && <p className="empty">No checkouts found.</p>}</div><Pager page={page} count={data?.count || 0} onChange={setPage} />
+    <div className="panel table-wrap"><table><thead><tr><th>Checkout No</th><th>Full name</th><th>Phone number</th><th>Asset name</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.flatMap(checkout => checkout.items.map(item => <tr key={item.id}><td className="strong">#{checkout.id}</td><td>{checkout.recipient_first_name} {checkout.recipient_last_name}</td><td>{checkout.recipient_phone}</td><td>{item.asset_name}</td><td><Badge value={item.status} /></td><td className="row-actions">{item.status === 'out' && <button className="text-button return-button" onClick={() => { setReturningItem(item); setReturnedAccessoryIds(item.accessory_snapshot.map(accessory => accessory.id)) }}>Mark returned</button>}<button className="text-button" onClick={() => setSelectedId(checkout.id)}>Open</button></td></tr>))}</tbody></table>{loading && <p className="empty">Loading checkouts…</p>}{!loading && !data?.results.length && <p className="empty">No checkouts found.</p>}</div><Pager page={page} count={data?.count || 0} onChange={setPage} />
     {creating && <CheckoutForm close={() => setCreating(false)} saved={() => { toast('Checkout created.'); setCreating(false); reload() }} />}
     {selectedId && <CheckoutDetail id={selectedId} revision={revision} close={() => setSelectedId(null)} reload={reload} />}
+    {returningItem && <div className="overlay" role="presentation" onClick={event => { if (event.target === event.currentTarget && !returnBusy) setReturningItem(null) }}><div className="dialog return-confirm-dialog" role="dialog" aria-modal="true" aria-label={`Confirm return for ${returningItem.asset_name}`}><div className="dialog-head"><h2>Confirm asset return</h2><button disabled={returnBusy} onClick={() => setReturningItem(null)} aria-label="Close">×</button></div><div className="form-stack"><p><strong>{returningItem.asset_name}</strong> is being returned. Confirm which listed accessories came back.</p>{returningItem.accessory_snapshot.length ? <fieldset className="accessory-field"><legend>Accessories received</legend><div className="accessory-options">{returningItem.accessory_snapshot.map(accessory => <label className="checkbox-line" key={accessory.id}><input type="checkbox" checked={returnedAccessoryIds.includes(accessory.id)} onChange={event => setReturnedAccessoryIds(current => event.target.checked ? [...current, accessory.id] : current.filter(id => id !== accessory.id))} />{accessory.name}</label>)}</div><p className="hint">Uncheck any missing accessory. The asset will remain unavailable until an Admin resolves it.</p></fieldset> : <p className="hint">No accessories were listed for this asset.</p>}<div className="form-actions"><button disabled={returnBusy} onClick={() => setReturningItem(null)}>Cancel</button><button className="primary" disabled={returnBusy} onClick={confirmReturn}>{returnBusy ? 'Saving…' : 'Confirm return'}</button></div></div></div></div>}
   </>
 }
 
