@@ -9,34 +9,32 @@ from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
-    """Create email-based staff accounts."""
+    """Create the one email-based IT Store account."""
 
     use_in_migrations = True
 
     def create_user(self, email, password=None, **fields):
         if not email:
             raise ValueError("An email address is required")
+        if self.model.objects.exists():
+            raise ValueError("The IT Store supports only one login account")
+        fields.update(singleton_key=1, is_staff=True, is_superuser=True)
         user = self.model(email=self.normalize_email(email), **fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, email, password=None, **fields):
-        fields.update(role=User.Role.ADMIN, is_staff=True, is_superuser=True)
         return self.create_user(email, password, **fields)
 
 
 class User(AbstractUser):
-    """IT staff account; borrowers are separate contacts without login access."""
-
-    class Role(models.TextChoices):
-        ADMIN = "admin", "Admin"
-        STAFF = "staff", "Staff"
+    """The single login account; recipients are contacts without login access."""
 
     username = None
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=160)
-    role = models.CharField(max_length=8, choices=Role.choices, default=Role.STAFF)
+    singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name"]
     objects = UserManager()
@@ -45,27 +43,25 @@ class User(AbstractUser):
         return self.name or self.email
 
 
-class Borrower(models.Model):
+class Recipient(models.Model):
     """Reusable contact details for anyone who borrows IT equipment."""
 
     class Type(models.TextChoices):
         EMPLOYEE = "employee", "Employee"
         STUDENT = "student", "Student"
-        CUSTOMER = "customer", "Customer"
         GUEST = "guest", "Guest"
-        OTHER = "other", "Other"
 
-    name = models.CharField(max_length=160)
+    first_name = models.CharField(max_length=160)
+    last_name = models.CharField(max_length=160)
     phone = models.CharField(max_length=40)
-    borrower_type = models.CharField(max_length=12, choices=Type.choices, blank=True)
-    notes = models.TextField(blank=True)
+    recipient_type = models.CharField(max_length=12, choices=Type.choices, default=Type.EMPLOYEE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["name", "id"]
+        ordering = ["first_name", "last_name", "id"]
 
     def __str__(self):
-        return self.name
+        return self.first_name
 
 
 class AssetSequence(models.Model):
@@ -79,7 +75,6 @@ class AccessoryOption(models.Model):
     """Reusable accessory labels shown as checkboxes for every asset type."""
 
     name = models.CharField(max_length=100)
-    is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["name", "id"]
@@ -96,7 +91,7 @@ class Asset(models.Model):
 
     class Status(models.TextChoices):
         AVAILABLE = "available", "Available"
-        ON_LOAN = "on_loan", "On loan"
+        CHECKED_OUT = "checked_out", "Checked out"
         DAMAGED = "damaged", "Damaged"
         LOST = "lost", "Lost"
         INCOMPLETE = "incomplete", "Incomplete"
@@ -127,21 +122,21 @@ class Asset(models.Model):
 
 
 class Checkout(models.Model):
-    """One handover to a borrower, possibly containing several assets."""
+    """One handover to a recipient, possibly containing several assets."""
 
-    borrower = models.ForeignKey(Borrower, on_delete=models.PROTECT, related_name="checkouts")
-    borrower_name = models.CharField(max_length=160)
-    borrower_phone = models.CharField(max_length=40)
+    recipient = models.ForeignKey(Recipient, on_delete=models.PROTECT, related_name="checkouts")
+    recipient_first_name = models.CharField(max_length=160)
+    recipient_last_name = models.CharField(max_length=160)
+    recipient_phone = models.CharField(max_length=40)
     issued_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="issued_checkouts")
     issued_at = models.DateTimeField(default=timezone.now)
-    due_date = models.DateField()
     notes = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-issued_at", "-id"]
 
     def __str__(self):
-        return f"Checkout #{self.pk} for {self.borrower_name}"
+        return f"Checkout #{self.pk}"
 
 
 class CheckoutItem(models.Model):
@@ -152,6 +147,7 @@ class CheckoutItem(models.Model):
         RETURNED = "returned", "Returned"
         DAMAGED = "damaged", "Returned damaged"
         LOST = "lost", "Lost"
+        CANCELLED = "cancelled", "Cancelled"
 
     checkout = models.ForeignKey(Checkout, on_delete=models.PROTECT, related_name="items")
     asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name="checkout_items")
@@ -159,7 +155,7 @@ class CheckoutItem(models.Model):
     asset_name = models.CharField(max_length=160)
     accessory_snapshot = models.JSONField(default=list)
     missing_accessories = models.JSONField(default=list)
-    status = models.CharField(max_length=8, choices=Status.choices, default=Status.OUT)
+    status = models.CharField(max_length=9, choices=Status.choices, default=Status.OUT)
     closed_at = models.DateTimeField(null=True, blank=True)
     closed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
     notes = models.TextField(blank=True)

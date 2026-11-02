@@ -1,6 +1,6 @@
 # TGC IT Store
 
-A small office-network app for lending individually identified IT devices and tools. IT staff record checkouts and returns; borrowers do not need accounts. The frontend uses the TGC logo and palette from the `service` project, and the backend follows its Django REST API and JWT sign-in approach. Domain-specific gem, billing, payment, and certificate code was not carried over.
+A small office-network app for lending individually identified IT devices and tools. Superadmins record checkouts and returns; people receiving equipment do not need accounts. The frontend uses the TGC logo and palette from the `service` project, and the backend follows its Django REST API and JWT sign-in approach. Domain-specific gem, billing, payment, and certificate code was not carried over.
 
 For component-specific setup and maintenance details, see the [backend README](backend/README.md) and [frontend README](frontend/README.md).
 
@@ -11,30 +11,28 @@ For component-specific setup and maintenance details, see the [backend README](b
 
 ## Local setup
 
-1. Create an empty PostgreSQL database and a user with access to it.
+1. Create an empty PostgreSQL database and a user with access to it. Since this project now uses one clean initial migration, drop and recreate any older development database before applying it.
 2. In `backend`, copy `.env.example` to `.env`. Set `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS` for your computer. Never commit `.env`.
-3. Run `uv sync`, then `uv run python manage.py migrate` and `uv run python manage.py createsuperuser`. The superuser is the first IT Store admin.
+3. Use a fresh development database, then run `uv sync`, `uv run python manage.py migrate`, and `uv run python manage.py createsuperuser` to create the one login account. Recreate the existing superuser with the same email if desired; its old database row is removed by the reset.
 4. Start the API with `uv run python manage.py runserver 0.0.0.0:8000`.
-5. In `frontend`, run `pnpm install` and `pnpm dev`. Open the address printed by Vite and sign in with the admin account. The development server proxies `/api` to `localhost:8000`.
+5. In `frontend`, run `pnpm install` and `pnpm dev`. Open the address printed by Vite and sign in with the Superadmin account. The development server proxies `/api` to `localhost:8000`.
 
 For an office-network deployment, configure a production WSGI server and static web server after the host operating system is selected. Use `DEBUG=False`, a strong secret key, appropriate host and origin lists, HTTPS where possible, and regular PostgreSQL backups. The Django development server and Vite development server are for development only.
 
 ## Daily workflow
 
-1. An admin registers each physical asset with a unique name, such as `Projector 1`. The app generates and keeps its internal ID out of the staff interface.
-2. Admins maintain a shared accessory checklist, seeded with power cables, chargers, common cables, remotes, cases, and batteries. When registering an asset, an admin checks the accessories included with it; the same options can be used for any asset type.
-3. Staff create a checkout by finding an existing borrower or registering a new one in the same form. New contacts require a name and phone number and can be reused.
-4. Staff select one or more available assets and set a due date before creating the checkout.
-5. On return, staff confirm each asset’s listed accessories and record the outcome. Missing accessories make the asset incomplete and unavailable until an admin resolves it; damaged and lost assets also remain unavailable until an admin changes their status.
-6. The dashboard and checkout filter show overdue items. Dates use `Africa/Dar_es_Salaam` unless `TIME_ZONE` is changed.
-
-Admins can manage assets, shared accessory options, and staff accounts. Staff can view assets and manage borrowers, checkouts, returns, and due dates. Asset names are unique; the internal asset ID is generated automatically and is not shown in the interface. All API endpoints require authentication except login and token refresh. There is no borrower login, automatic message, receipt, signature, or import process.
+1. A Superadmin registers each physical asset with a unique name, such as `Projector 1`. The app generates and keeps its internal ID out of the interface.
+2. Superadmins maintain a shared accessory checklist, seeded with power cables, chargers, common cables, remotes, cases, and batteries. When registering an asset, a Superadmin checks the accessories included with it; the same options can be used for any asset type.
+3. A Superadmin creates a checkout by finding an existing person or registering a new recipient in the same form. New contacts require a name and phone number and can be reused.
+4. The Superadmin selects one or more available assets before creating the checkout. Each selected asset shows its configured accessories as checked boxes; accessories staying in the office can be unchecked. Only checked accessories are recorded as going out and confirmed on return.
+5. On return, a Superadmin confirms each asset’s listed accessories and records the outcome. Missing accessories make the asset incomplete and unavailable until a Superadmin resolves it; damaged and lost assets also remain unavailable until a Superadmin changes their status.
+The system has one Superadmin login. Account creation and management are not available in the app, API, or Django admin; initialize the account with `createsuperuser`. The Superadmin can change their own password. Asset names are unique; the internal asset ID is generated automatically and is not shown in the interface. All API endpoints require authentication except login and token refresh. Recipients do not sign in; there are no automatic messages, receipts, signatures, or import process.
 
 ## API
 
-The API is under `/api/v1/`. Main resources are `assets/`, `accessories/`, `borrowers/`, `checkouts/`, and admin-only `users/`. Staff can use `checkout-items/{id}/resolve/` to record an outcome and missing accessories, and `PATCH checkouts/{id}/` to change a due date. `dashboard/` returns summary counts, including incomplete assets. Authentication endpoints are `auth/login/`, `auth/refresh/`, `auth/logout/`, `auth/me/`, and `auth/password/`.
+The API is under `/api/v1/`. Main resources are `assets/`, `accessories/`, `people/`, and `checkouts/`. Checkouts use `recipient` or `recipient_data`; the Superadmin uses `checkout-items/{id}/resolve/` to record an outcome and missing accessories.
 
-Search assets, borrowers, and checkouts with `?q=`, and filter assets or checkouts with `?status=`. List responses use 25-item pages. Checkout history records the issuing staff member, borrower details, asset names and accessories as they were at issue time, due-date changes, item outcomes, and any accessories reported missing.
+Search assets, people, and checkouts with `?q=`, and filter assets or checkouts with `?status=`. List responses use 25-item pages. Checkout history records the issuing Superadmin, recipient details, asset names and accessories as they were at issue time, due-date changes, item outcomes, and any accessories reported missing.
 
 ## Verification
 

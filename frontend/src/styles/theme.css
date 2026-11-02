@@ -1,20 +1,239 @@
-/* TGC palette adapted from service/frontend/src/styles/theme.css. */
+/*
+ * TGC Color System v2 — role token definitions.
+ *
+ * This file is the single mapping from the TGC palette to the roles the
+ * interface consumes (spec §29). Components reference roles only; no component
+ * should carry a raw hex or a Tailwind palette class such as `amber-500`.
+ *
+ * Two rules govern the naming, both from spec §33:
+ *   - `accent` is shadcn's neutral hover surface, NOT the TGC brand accent.
+ *     Orange lives under `--primary`, because `bg-accent` paints every hovered
+ *     menu item, calendar day and ghost button in the app.
+ *   - `secondary` is shadcn's quiet chip surface, NOT a brand color. Navy is
+ *     the institutional surface and lives under `--institutional`.
+ */
+
 :root {
+  --radius: 0.625rem;
+
   --brand-navy: #0f2743;
   --brand-blue-mid: #112a48;
   --brand-blue-highlight: #204b76;
   --brand-orange: #c77530;
-  --brand-sidebar-gradient: linear-gradient(90deg, var(--brand-navy) 0%, var(--brand-blue-mid) 55%, var(--brand-blue-highlight) 100%);
-  --brand-gradient-clean: radial-gradient(ellipse at 88% 48%, rgb(80 139 186 / 22%), transparent 42%), linear-gradient(110deg, var(--brand-navy) 0%, var(--brand-blue-mid) 55%, var(--brand-blue-highlight) 100%);
-  --background: #f7fafe;
-  --foreground: #0f172a;
+  --brand-sidebar-gradient: linear-gradient(
+    90deg,
+    var(--brand-navy) 0%,
+    var(--brand-blue-mid) 55%,
+    var(--brand-blue-highlight) 100%
+  );
+  --brand-gradient-clean:
+    radial-gradient(ellipse at 88% 48%, rgb(80 139 186 / 22%), transparent 42%),
+    linear-gradient(
+      110deg,
+      var(--brand-navy) 0%,
+      var(--brand-blue-mid) 55%,
+      var(--brand-blue-highlight) 100%
+    );
+
+  /*
+   * Surfaces and text — cool neutrals that keep the navy and orange brand clear.
+   *
+   * The spec's default neutrals are the slate scale (#F8FAFC, #F1F5F9,
+   * #E2E8F0), which reads grey. Every light surface here is the same value
+   * rotated onto the blue hue and matched for lightness, so the interface
+   * stays calm while the brand colors identify the shell and key actions.
+   *
+   * Cards stay pure white deliberately: that contrast against the tinted
+   * ground is what makes them read as raised.
+   */
+  --background: #f7fafe; /* blue-tinted neutral-50 */
+  --foreground: #0f172a; /* neutral-900 */
   --card: #ffffff;
-  --muted: #eaf1fb;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --muted: #eaf1fb; /* blue-tinted neutral-100 */
+  /*
+   * A step darker than the spec's #64748B muted text.
+   *
+   * Tinted surfaces are slightly darker than the slate ones they replace, and
+   * #64748B falls to 3.9:1 on the sidebar accent — below AA. This clears 4.5:1
+   * on every surface in the theme while still reading as secondary text.
+   */
   --muted-foreground: #586780;
-  --border: #dbe5f3;
-  --border-strong: #c3d4ea;
+  --border: #dbe5f3; /* blue-tinted neutral-200 */
+  --border-strong: #c3d4ea; /* blue-tinted neutral-300 */
+  /* Form outlines use the strong border: a field must read as an affordance,
+   * not as a divider. */
   --input: #c3d4ea;
-  --primary: #b05d25;
+  --ring: var(--brand-orange); /* focus carries brand identity */
+
+  /* Brand — spec §12.3 */
+  --primary: #b05d25; /* accessible orange for white button labels */
+  --primary-foreground: #ffffff;
   --primary-hover: #994f1f;
+  --primary-active: #80421a;
   --primary-subtle: color-mix(in oklab, var(--primary) 12%, var(--card));
+  --institutional: var(--brand-navy);
+  --institutional-foreground: #ffffff;
+  --institutional-subtle: #edf3f8;
+  --gold: var(--brand-orange);
+  --gold-foreground: #0f172a;
+  --gold-subtle: color-mix(in oklab, var(--gold) 12%, var(--card));
+
+  /*
+   * Framework hover and chip surfaces.
+   *
+   * Tinted with the same faint blue rather than the brand colour itself:
+   * `bg-accent` paints every hovered menu item, calendar day and ghost button,
+   * so it has to carry the family resemblance without carrying the identity.
+   */
+  --secondary: #e8f0fb;
+  --secondary-foreground: #0f172a;
+  --accent: #e8f0fb;
+  --accent-foreground: #0f172a;
+
+  /* Semantic quads — spec §12.4. Each role needs a solid fill, the text colour
+   * legible on a plain surface, and a tint. The solid value is never reused as
+   * text: #DC2626 as inline copy fails contrast on a dark ground. */
+  --success: #16a34a;
+  --success-foreground: #ffffff;
+  --success-text: #15803d;
+  --warning: #d97706;
+  --warning-foreground: #ffffff;
+  --warning-text: #b45309;
+  --danger: #dc2626;
+  --danger-foreground: #ffffff;
+  --danger-text: #b91c1c;
+  --info: #2563eb;
+  --info-foreground: #ffffff;
+  --info-text: #1d4ed8;
+
+  /* shadcn spells danger `destructive`; alias rather than duplicate. */
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+
+  /*
+   * Derived tints — spec §12.5.
+   *
+   * Defined once and resolved lazily against whichever --card is in scope, so
+   * the dark theme inherits correct tints without redeclaring eight constants
+   * that would drift out of sync over time.
+   */
+  --success-subtle: color-mix(in oklab, var(--success) 12%, var(--card));
+  --success-border: color-mix(in oklab, var(--success) 30%, var(--card));
+  --warning-subtle: color-mix(in oklab, var(--warning) 12%, var(--card));
+  --warning-border: color-mix(in oklab, var(--warning) 30%, var(--card));
+  --danger-subtle: color-mix(in oklab, var(--danger) 12%, var(--card));
+  --danger-border: color-mix(in oklab, var(--danger) 30%, var(--card));
+  --info-subtle: color-mix(in oklab, var(--info) 12%, var(--card));
+  --info-border: color-mix(in oklab, var(--info) 30%, var(--card));
+
+  /* Categorical chart sequence starts with the new navy and orange brand. */
+  --chart-1: var(--brand-navy);
+  --chart-2: var(--brand-orange);
+  --chart-3: var(--brand-blue-highlight);
+  --chart-4: #587895;
+  --chart-5: #8ea4b8;
+  --chart-6: #c0ccd7;
+
+  /*
+   * The sidebar is a distinct surface, not the same sheet as the content.
+   *
+   * In the default `inset` variant the page takes --sidebar and the content
+   * floats on it as a --background card, so this one value is what makes the
+   * content read as raised.
+   *
+   * Light navigation uses the same navy as the app header. A translucent white
+   * hover surface stays visible over the gradient, while the active item uses
+   * accessible brand orange.
+   */
+  --sidebar: var(--brand-navy);
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: rgb(255 255 255 / 16%);
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: #24415f;
+  --sidebar-ring: var(--ring);
+
+  /*
+   * Table headers need their own tone, not --muted.
+   *
+   * --muted is only ~3% darker than a white card, which disappears. This is a
+   * blue-tinted neutral: dark enough to separate the header band, quiet enough
+   * not to compete with the data.
+   */
+  --table-header: #e4edf9;
 }
+
+.dark {
+  /* Surfaces invert; the card lifts *above* the ground — spec §25, §34. */
+  --background: #020617; /* neutral-950 */
+  --foreground: #f8fafc;
+  --card: #0f172a; /* neutral-900 */
+  --card-foreground: #f8fafc;
+  --popover: #1e293b; /* neutral-800 */
+  --popover-foreground: #f8fafc;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8; /* neutral-400 */
+  --border: #334155; /* neutral-700 */
+  --border-strong: #475569; /* neutral-600 */
+  --input: #475569;
+  --ring: #3d8dd4;
+
+  /*
+   * The inversion rule — spec §34.
+   *
+   * As the ground darkens the brand surface lightens, so its foreground must
+   * darken with it. A light-blue button carrying white text is the standard
+   * dark-mode brand failure; #001A36 on #3D8DD4 clears it comfortably.
+   */
+  --primary: #3d8dd4; /* blue-400 */
+  --primary-foreground: #001a36; /* blue-950 */
+  --primary-hover: #0a6ed1; /* blue-500 */
+  --primary-active: #0152a9; /* blue-600 */
+  --primary-subtle: color-mix(in oklab, var(--primary) 15%, var(--card));
+  /* Teal is already dark, so it deepens rather than lightens. */
+  --institutional: #032637; /* teal-950 */
+  --institutional-foreground: #f8fafc;
+  --institutional-subtle: color-mix(in oklab, #45a6bd 15%, var(--card));
+  --gold: #f0b832; /* gold-400 */
+  --gold-foreground: #452a05;
+  --gold-subtle: color-mix(in oklab, var(--gold) 15%, var(--card));
+
+  --secondary: #1e293b;
+  --secondary-foreground: #f8fafc;
+  --accent: #1e293b;
+  --accent-foreground: #f8fafc;
+
+  /*
+   * Solid semantic fills keep their light-mode values — they are dark enough
+   * to carry white text on any ground. Only the text variants lighten, since
+   * #B91C1C as inline copy is unreadable on #020617.
+   */
+  --success-text: #4ade80;
+  --warning-text: #fbbf24;
+  --danger-text: #f87171;
+  --info-text: #60a5fa;
+
+  /* Chart shades lighten to hold their own against the dark ground. */
+  --chart-1: #3d8dd4;
+  --chart-2: #45a6bd;
+  --chart-3: #f0b832;
+  --chart-4: #82b4e5;
+  --chart-5: #7bc4d4;
+  --chart-6: #64748b;
+
+  /*
+   * Dark mode inverts the relationship: the sidebar recedes *below* the
+   * content rather than sitting above it, so the content card still reads as
+   * the raised surface. The teal tint survives at teal-950.
+   */
+  --sidebar: #032637;
+  --sidebar-accent: #063a56; /* teal-900 */
+  --sidebar-border: #07364d;
+
+  --table-header: #1e293b;
+}
+

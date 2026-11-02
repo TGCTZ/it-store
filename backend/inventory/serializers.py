@@ -1,57 +1,43 @@
 """Input validation and stable JSON shapes for the office UI."""
 
 from django.db import transaction
-from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
     AccessoryOption,
     Asset,
     AssetSequence,
-    Borrower,
     Checkout,
     CheckoutItem,
     Event,
+    Recipient,
     User,
 )
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, min_length=8)
-
     class Meta:
         model = User
-        fields = ("id", "email", "name", "role", "is_active", "password")
-
-    def validate(self, attrs):
-        if not self.instance and not attrs.get("password"):
-            raise serializers.ValidationError({"password": "An initial password is required."})
-        return attrs
-
-    def create(self, validated_data):
-        password = validated_data.pop("password")
-        return User.objects.create_user(password=password, **validated_data)
-
-    def update(self, instance, validated_data):
-        password = validated_data.pop("password", None)
-        for name, value in validated_data.items():
-            setattr(instance, name, value)
-        if password:
-            instance.set_password(password)
-        instance.save()
-        return instance
+        fields = ("id", "email", "name", "is_active")
+        read_only_fields = fields
 
 
-class BorrowerSerializer(serializers.ModelSerializer):
+class RecipientSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Borrower
-        fields = ("id", "name", "phone", "borrower_type", "notes", "created_at")
+        model = Recipient
+        fields = ("id", "first_name", "last_name", "phone", "recipient_type", "created_at")
         read_only_fields = ("id", "created_at")
 
-    def validate_name(self, value):
+    def validate_first_name(self, value):
         value = value.strip()
         if not value:
-            raise serializers.ValidationError("Name is required.")
+            raise serializers.ValidationError("First name is required.")
+        return value
+
+    def validate_last_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Last name is required.")
         return value
 
     def validate_phone(self, value):
@@ -75,7 +61,7 @@ def next_asset_id():
 class AccessoryOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccessoryOption
-        fields = ("id", "name", "is_active")
+        fields = ("id", "name")
         read_only_fields = ("id",)
 
     def validate_name(self, value):
@@ -137,27 +123,17 @@ class AssetSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("An asset with this name already exists.")
         return value
 
-    def validate_accessory_ids(self, value):
-        selected = {option.pk for option in value}
-        active = set(AccessoryOption.objects.filter(is_active=True).values_list("pk", flat=True))
-        existing = (
-            set(self.instance.accessories.values_list("pk", flat=True)) if self.instance else set()
-        )
-        if selected - active - existing:
-            raise serializers.ValidationError("Inactive accessories cannot be added to an asset.")
-        return value
-
     def validate(self, attrs):
-        if self.instance and self.instance.status == Asset.Status.ON_LOAN:
+        if self.instance and self.instance.status == Asset.Status.CHECKED_OUT:
             new_status = attrs.get("status", self.instance.status)
-            if new_status != Asset.Status.ON_LOAN:
+            if new_status != Asset.Status.CHECKED_OUT:
                 raise serializers.ValidationError(
-                    {"status": "An item on loan cannot be changed here."}
+                    {"status": "A checked-out item cannot be changed here."}
                 )
-        if self.instance and attrs.get("status") == Asset.Status.ON_LOAN:
-            if self.instance.status != Asset.Status.ON_LOAN:
+        if self.instance and attrs.get("status") == Asset.Status.CHECKED_OUT:
+            if self.instance.status != Asset.Status.CHECKED_OUT:
                 raise serializers.ValidationError(
-                    {"status": "Only a checkout may put an asset on loan."}
+                    {"status": "Only a checkout may mark an asset checked out."}
                 )
         if (
             self.instance
@@ -222,14 +198,24 @@ class CheckoutItemSerializer(serializers.ModelSerializer):
         )
 
 
+class AssetAccessorySelectionSerializer(serializers.Serializer):
+    asset = serializers.IntegerField(min_value=1)
+    accessory_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=True
+    )
+
+
 class CheckoutSerializer(serializers.ModelSerializer):
-    borrower = serializers.PrimaryKeyRelatedField(queryset=Borrower.objects.all(), required=False)
-    borrower_data = BorrowerSerializer(required=False, write_only=True)
+    recipient = serializers.PrimaryKeyRelatedField(queryset=Recipient.objects.all(), required=False)
+    recipient_data = RecipientSerializer(required=False, write_only=True)
     asset_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         write_only=True,
         required=True,
         allow_empty=False,
+    )
+    asset_accessories = AssetAccessorySelectionSerializer(
+        many=True, required=False, write_only=True
     )
     items = CheckoutItemSerializer(many=True, read_only=True)
     events = EventSerializer(many=True, read_only=True)
@@ -240,23 +226,25 @@ class CheckoutSerializer(serializers.ModelSerializer):
         model = Checkout
         fields = (
             "id",
-            "borrower",
-            "borrower_data",
-            "borrower_name",
-            "borrower_phone",
+            "recipient",
+            "recipient_data",
+            "recipient_first_name",
+            "recipient_last_name",
+            "recipient_phone",
             "asset_ids",
+            "asset_accessories",
             "items",
             "events",
             "issued_at",
             "issued_by_name",
-            "due_date",
             "notes",
             "status",
         )
         read_only_fields = (
             "id",
-            "borrower_name",
-            "borrower_phone",
+            "recipient_first_name",
+            "recipient_last_name",
+            "recipient_phone",
             "items",
             "events",
             "issued_at",
@@ -265,11 +253,12 @@ class CheckoutSerializer(serializers.ModelSerializer):
         )
 
     def get_status(self, obj):
-        if not any(item.status == CheckoutItem.Status.OUT for item in obj.items.all()):
-            return "closed"
-        if obj.due_date < timezone.localdate():
-            return "overdue"
-        return "active"
+        items = list(obj.items.all())
+        if items and all(item.status == CheckoutItem.Status.CANCELLED for item in items):
+            return "cancelled"
+        if any(item.status == CheckoutItem.Status.OUT for item in items):
+            return "active"
+        return "closed"
 
     def validate_asset_ids(self, value):
         if len(value) != len(set(value)):
@@ -279,23 +268,38 @@ class CheckoutSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance is not None:
             return attrs
-        has_borrower = attrs.get("borrower") is not None
-        has_new_borrower = bool(attrs.get("borrower_data"))
-        if has_borrower == has_new_borrower:
+        selections = attrs.get("asset_accessories")
+        if selections is not None:
+            selected_assets = set(attrs["asset_ids"])
+            selection_asset_ids = [selection["asset"] for selection in selections]
+            if len(selection_asset_ids) != len(set(selection_asset_ids)):
+                raise serializers.ValidationError(
+                    {"asset_accessories": "Each asset may have one accessory selection."}
+                )
+            if set(selection_asset_ids) != selected_assets:
+                raise serializers.ValidationError(
+                    {"asset_accessories": "Provide accessory selections for every selected asset."}
+                )
+            if any(
+                len(selection["accessory_ids"]) != len(set(selection["accessory_ids"]))
+                for selection in selections
+            ):
+                raise serializers.ValidationError(
+                    {"asset_accessories": "Each accessory may be selected only once per asset."}
+                )
+        has_recipient = attrs.get("recipient") is not None
+        has_new_recipient = bool(attrs.get("recipient_data"))
+        if has_recipient == has_new_recipient:
             raise serializers.ValidationError(
-                {"borrower": "Select an existing borrower or enter a new borrower, not both."}
+                {"recipient": "Select an existing person or enter a new recipient, not both."}
             )
         return attrs
-
-    def validate_due_date(self, value):
-        if not self.instance and value < timezone.localdate():
-            raise serializers.ValidationError("The due date cannot be in the past.")
-        return value
 
     @transaction.atomic
     def create(self, validated_data):
         asset_ids = validated_data.pop("asset_ids")
-        borrower_data = validated_data.pop("borrower_data", None)
+        accessory_selections = validated_data.pop("asset_accessories", None)
+        recipient_data = validated_data.pop("recipient_data", None)
         assets = list(
             Asset.objects.select_for_update()
             .prefetch_related("accessories")
@@ -306,14 +310,27 @@ class CheckoutSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"asset_ids": "One or more assets do not exist."})
         if any(asset.status != Asset.Status.AVAILABLE for asset in assets):
             raise serializers.ValidationError({"asset_ids": "All assets must be available."})
-        borrower = validated_data.pop("borrower", None)
-        if borrower_data:
-            borrower = Borrower.objects.create(**borrower_data)
+        selection_map = (
+            {selection["asset"]: set(selection["accessory_ids"]) for selection in accessory_selections}
+            if accessory_selections is not None
+            else None
+        )
+        for asset in assets:
+            if selection_map is not None:
+                configured_ids = set(asset.accessories.values_list("pk", flat=True))
+                if selection_map[asset.pk] - configured_ids:
+                    raise serializers.ValidationError(
+                        {"asset_accessories": f"An accessory is not assigned to {asset.name}."}
+                    )
+        recipient = validated_data.pop("recipient", None)
+        if recipient_data:
+            recipient = Recipient.objects.create(**recipient_data)
         checkout = Checkout.objects.create(
             **validated_data,
-            borrower=borrower,
-            borrower_name=borrower.name,
-            borrower_phone=borrower.phone,
+            recipient=recipient,
+            recipient_first_name=recipient.first_name,
+            recipient_last_name=recipient.last_name,
+            recipient_phone=recipient.phone,
             issued_by=self.context["request"].user,
         )
         CheckoutItem.objects.bulk_create(
@@ -326,7 +343,11 @@ class CheckoutSerializer(serializers.ModelSerializer):
                     accessory_snapshot=[
                         {"id": accessory.id, "name": accessory.name}
                         for accessory in sorted(
-                            asset.accessories.all(),
+                            asset.accessories.filter(
+                                pk__in=selection_map[asset.pk]
+                                if selection_map is not None
+                                else asset.accessories.values_list("pk", flat=True)
+                            ),
                             key=lambda option: (option.name.lower(), option.id),
                         )
                     ],
@@ -334,7 +355,7 @@ class CheckoutSerializer(serializers.ModelSerializer):
                 for asset in assets
             ]
         )
-        Asset.objects.filter(pk__in=asset_ids).update(status=Asset.Status.ON_LOAN)
+        Asset.objects.filter(pk__in=asset_ids).update(status=Asset.Status.CHECKED_OUT)
         Event.objects.create(
             actor=checkout.issued_by,
             checkout=checkout,
@@ -345,25 +366,9 @@ class CheckoutSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        if "asset_ids" in validated_data or "borrower" in validated_data:
-            raise serializers.ValidationError("Only the due date and notes may change.")
-        if (
-            "due_date" in validated_data
-            and not instance.items.filter(status=CheckoutItem.Status.OUT).exists()
-        ):
-            raise serializers.ValidationError(
-                {"due_date": "A closed checkout has no active due date."}
-            )
-        old_due_date = instance.due_date
-        instance = super().update(instance, validated_data)
-        if instance.due_date != old_due_date:
-            Event.objects.create(
-                actor=self.context["request"].user,
-                checkout=instance,
-                kind="due_date_changed",
-                details={"from": old_due_date.isoformat(), "to": instance.due_date.isoformat()},
-            )
-        return instance
+        if set(validated_data) - {"notes"}:
+            raise serializers.ValidationError("Only checkout notes may be changed.")
+        return super().update(instance, validated_data)
 
 
 class ResolveSerializer(serializers.Serializer):

@@ -1,11 +1,9 @@
-export type Role = 'admin' | 'staff'
-export type AssetStatus = 'available' | 'on_loan' | 'damaged' | 'lost' | 'incomplete' | 'retired'
-export type ItemStatus = 'out' | 'returned' | 'damaged' | 'lost'
+export type AssetStatus = 'available' | 'checked_out' | 'damaged' | 'lost' | 'incomplete' | 'retired'
+export type ItemStatus = 'out' | 'returned' | 'damaged' | 'lost' | 'cancelled'
 
 export interface AccessoryOption {
   id: number
   name: string
-  is_active: boolean
 }
 
 export interface AccessorySnapshot {
@@ -17,7 +15,6 @@ export interface User {
   id: number
   name: string
   email: string
-  role: Role
   is_active: boolean
 }
 
@@ -31,12 +28,12 @@ export interface Asset {
   status: AssetStatus
 }
 
-export interface Borrower {
+export interface Person {
   id: number
-  name: string
+  first_name: string
+  last_name: string
   phone: string
-  borrower_type: string
-  notes: string
+  recipient_type: string
 }
 
 export interface CheckoutItem {
@@ -62,16 +59,16 @@ export interface Event {
 
 export interface Checkout {
   id: number
-  borrower: number
-  borrower_name: string
-  borrower_phone: string
+  recipient: number
+  recipient_first_name: string
+  recipient_last_name: string
+  recipient_phone: string
   items: CheckoutItem[]
   events: Event[]
   issued_at: string
   issued_by_name: string
-  due_date: string
   notes: string
-  status: 'active' | 'overdue' | 'closed'
+  status: 'active' | 'closed' | 'cancelled'
 }
 
 export interface Page<T> {
@@ -81,12 +78,3 @@ export interface Page<T> {
   results: T[]
 }
 
-export interface Summary {
-  available: number
-  on_loan: number
-  overdue: number
-  damaged: number
-  lost: number
-  incomplete: number
-  retired: number
-}

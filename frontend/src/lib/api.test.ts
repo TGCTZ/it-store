@@ -15,13 +15,13 @@ beforeEach(() => {
 })
 
 describe('API session', () => {
-  it('saves a token pair after staff sign-in', async () => {
+  it('saves a token pair after Superadmin sign-in', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       access: 'access-1', refresh: 'refresh-1',
-      user: { id: 1, name: 'IT Staff', email: 'staff@example.test', role: 'staff', is_active: true },
+      user: { id: 1, name: 'Superadmin', email: 'admin@example.test', is_active: true },
     }), { status: 200 })))
-    const user = await login('staff@example.test', 'password123')
-    expect(user.name).toBe('IT Staff')
+    const user = await login('admin@example.test', 'password123')
+    expect(user.name).toBe('Superadmin')
     expect(hasSession()).toBe(true)
   })
 
@@ -30,10 +30,10 @@ describe('API session', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response('{}', { status: 401 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ access: 'new-access', refresh: 'new-refresh' }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ available: 2 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ count: 2, next: null, previous: null, results: [] }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    const data = await api<{ available: number }>('/dashboard/')
-    expect(data.available).toBe(2)
+    const data = await api<{ count: number }>('/assets/')
+    expect(data.count).toBe(2)
     expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(storage.get('itstore_refresh')).toBe('new-refresh')
     clearTokens()

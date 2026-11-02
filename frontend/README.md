@@ -1,6 +1,6 @@
 # TGC IT Store frontend
 
-This React and TypeScript app gives IT staff a browser interface for inventory, borrowers, checkouts, returns, and overdue follow-up. Its logo and colors were adapted from the TGC service project.
+This React and TypeScript app gives IT staff a browser interface for inventory, people receiving equipment, checkouts, returns, and overdue follow-up. Its logo and colors were adapted from the TGC service project.
 
 See the [project README](../README.md) for the complete office workflow.
 
@@ -19,15 +19,15 @@ The production build is generated with `pnpm build` in `dist/`. The office web s
 
 ## Screen and code map
 
-- **Overview:** available, on-loan, overdue, incomplete, damaged, and lost counts.
+- **Overview:** available, checked-out, overdue, incomplete, damaged, and lost counts.
 - **Assets:** searchable inventory by unique name. Admins can record included accessories from a shared checklist, manage checklist options, and resolve incomplete items.
-- **Borrowers:** reusable contacts with required name and phone number.
-- **Checkouts:** search for an existing borrower or register one inside the creation dialog, then issue several assets together. Staff can later change a due date and confirm accessories on each return. Missing accessories leave the asset unavailable until an Admin resolves it. The detail view shows the automatic activity history.
+- **People:** reusable recipient contacts with required name and phone number.
+- **Checkouts:** search for an existing person or register a new recipient inside the creation dialog, then issue several assets together. Staff can later change a due date and confirm accessories on each return. Missing accessories leave the asset unavailable until an Admin resolves it. The detail view shows the automatic activity history.
 - **Staff accounts:** visible to admins for account creation, role changes, activation, and password resets.
 
 `src/App.tsx` contains the screens and forms. `src/lib/api.ts` handles JSON requests, staff sign-in, token refresh, and session expiry; `src/lib/types.ts` describes the API data. `src/styles/theme.css` contains the retained TGC palette, while `src/styles/app.css` defines the interface layout.
 
-Tokens live in browser `sessionStorage`, so closing the tab ends the browser session. The API issues the tokens; the frontend retries a protected request once after refreshing an expired access token. The API enforces permissions even if a user bypasses the interface. Borrowers never sign in.
+Tokens live in browser `sessionStorage`, so closing the tab ends the browser session. The API issues the tokens; the frontend retries a protected request once after refreshing an expired access token. The API enforces permissions even if a user bypasses the interface. Recipients never sign in.
 
 ## Checks
 

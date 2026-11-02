@@ -1,34 +1,34 @@
-"""Authenticated office workflows and admin-only management endpoints."""
+"""Authenticated office workflows for the single IT Store account."""
 
 from django.contrib.auth import authenticate
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import AccessoryOption, Asset, Borrower, Checkout, CheckoutItem, Event, User
+from .models import AccessoryOption, Asset, Checkout, CheckoutItem, Event, Recipient
 from .serializers import (
     AccessoryOptionSerializer,
     AssetSerializer,
-    BorrowerSerializer,
     CheckoutSerializer,
+    RecipientSerializer,
     ResolveSerializer,
     UserSerializer,
 )
 
 
-class IsAdmin(permissions.BasePermission):
-    """Only authenticated IT administrators may change stock or accounts."""
+class IsSuperuser(permissions.BasePermission):
+    """Require the single account for administrative operations."""
 
     def has_permission(self, request, view):
         return bool(
             request.user.is_authenticated
-            and (request.user.role == User.Role.ADMIN or request.user.is_superuser)
+            and request.user.is_superuser
         )
 
 
@@ -83,29 +83,13 @@ class ChangePasswordView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.order_by("name")
-    serializer_class = UserSerializer
-    permission_classes = [IsAdmin]
-    http_method_names = ["get", "post", "patch", "head", "options"]
-
-    def perform_update(self, serializer):
-        user = self.get_object()
-        if user == self.request.user:
-            if serializer.validated_data.get("is_active") is False:
-                raise ValidationError({"is_active": "You cannot deactivate your own account."})
-            if serializer.validated_data.get("role") == User.Role.STAFF:
-                raise ValidationError({"role": "You cannot remove your own admin role."})
-        serializer.save()
-
-
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ("create", "partial_update"):
-            return [IsAdmin()]
+        if self.action in ("create", "partial_update", "destroy"):
+            return [IsSuperuser()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
@@ -118,71 +102,158 @@ class AssetViewSet(viewsets.ModelViewSet):
             qs = qs.filter(status=asset_status)
         return qs.order_by("name", "pk")
 
+    def destroy(self, request, *args, **kwargs):
+        asset = self.get_object()
+        if asset.checkout_items.exists() or asset.events.exists():
+            return Response(
+                {"detail": "This asset has checkout history. Retire it to preserve its records."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
+
 
 class AccessoryOptionViewSet(viewsets.ModelViewSet):
     serializer_class = AccessoryOptionSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ("create", "partial_update"):
-            return [IsAdmin()]
+        if self.action in ("create", "partial_update", "destroy"):
+            return [IsSuperuser()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        queryset = AccessoryOption.objects.all()
-        if not (self.request.user.role == User.Role.ADMIN or self.request.user.is_superuser):
-            queryset = queryset.filter(is_active=True)
-        return queryset.order_by("name", "pk")
+        return AccessoryOption.objects.all().order_by("name", "pk")
+
+    def destroy(self, request, *args, **kwargs):
+        option = self.get_object()
+        if option.assets.exists():
+            return Response(
+                {"detail": "This option is assigned to assets. Remove it from those assets first."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
-class BorrowerViewSet(viewsets.ModelViewSet):
-    serializer_class = BorrowerSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+class PeopleViewSet(viewsets.ModelViewSet):
+    serializer_class = RecipientSerializer
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ("create", "partial_update", "destroy"):
+            return [IsSuperuser()]
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        qs = Borrower.objects.all()
+        qs = Recipient.objects.all()
         q = self.request.query_params.get("q", "").strip()
         if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(phone__icontains=q))
+            name_query = Q()
+            for word in q.split():
+                name_query &= Q(first_name__icontains=word) | Q(last_name__icontains=word)
+            qs = qs.filter(name_query | Q(phone__icontains=q))
         return qs
+
+    def destroy(self, request, *args, **kwargs):
+        person = self.get_object()
+        if person.checkouts.exists():
+            return Response(
+                {"detail": "This person has checkout history and cannot be deleted."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class CheckoutViewSet(viewsets.ModelViewSet):
     serializer_class = CheckoutSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [IsSuperuser()]
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        qs = Checkout.objects.select_related("borrower", "issued_by").prefetch_related(
+        qs = Checkout.objects.select_related("recipient", "issued_by").prefetch_related(
             "items__asset", "items__closed_by", "events__actor"
         )
         q = self.request.query_params.get("q", "").strip()
         if q:
+            recipient_query = Q()
+            for word in q.split():
+                recipient_query &= (
+                    Q(recipient_first_name__icontains=word)
+                    | Q(recipient_last_name__icontains=word)
+                )
             qs = qs.filter(
-                Q(borrower_name__icontains=q)
-                | Q(borrower_phone__icontains=q)
+                recipient_query
+                | Q(recipient_phone__icontains=q)
                 | Q(items__asset_name__icontains=q)
             ).distinct()
         checkout_status = self.request.query_params.get("status")
-        if checkout_status == "overdue":
-            qs = qs.filter(due_date__lt=timezone.localdate(), items__status=CheckoutItem.Status.OUT)
-        elif checkout_status == "active":
-            qs = qs.filter(
-                due_date__gte=timezone.localdate(), items__status=CheckoutItem.Status.OUT
-            )
+        if checkout_status == "active":
+            qs = qs.filter(items__status=CheckoutItem.Status.OUT)
         elif checkout_status == "closed":
             qs = qs.exclude(items__status=CheckoutItem.Status.OUT)
+        elif checkout_status == "cancelled":
+            qs = qs.annotate(
+                item_count=Count("items", distinct=True),
+                cancelled_count=Count(
+                    "items", filter=Q(items__status=CheckoutItem.Status.CANCELLED), distinct=True
+                ),
+            ).filter(item_count__gt=0, item_count=F("cancelled_count"))
         return qs.distinct().order_by("-issued_at", "-pk")
+
+    def _cancel_outstanding_items(self, checkout, actor):
+        items = list(
+            CheckoutItem.objects.select_for_update()
+            .select_related("asset")
+            .filter(checkout=checkout, status=CheckoutItem.Status.OUT)
+        )
+        if not items:
+            raise ValidationError({"detail": "This checkout has no outstanding items to cancel."})
+        now = timezone.now()
+        asset_ids = [item.asset_id for item in items]
+        for item in items:
+            item.status = CheckoutItem.Status.CANCELLED
+            item.closed_at = now
+            item.closed_by = actor
+        CheckoutItem.objects.bulk_update(items, ["status", "closed_at", "closed_by"])
+        Asset.objects.filter(pk__in=asset_ids, status=Asset.Status.CHECKED_OUT).update(
+            status=Asset.Status.AVAILABLE
+        )
+        Event.objects.create(
+            actor=actor,
+            checkout=checkout,
+            kind="checkout_cancelled",
+            details={"asset_names": [item.asset_name for item in items]},
+        )
+        return items
+
+    def destroy(self, request, *args, **kwargs):
+        checkout = self.get_object()
+        with transaction.atomic():
+            self._cancel_outstanding_items(checkout, request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsSuperuser])
+    @transaction.atomic
+    def cancel(self, request, pk=None):
+        checkout = Checkout.objects.select_for_update().get(pk=pk)
+        self._cancel_outstanding_items(checkout, request.user)
+        return Response(CheckoutSerializer(checkout, context={"request": request}).data)
 
     def update(self, request, *args, **kwargs):
         if not kwargs.get("partial", False):
-            return Response({"detail": "Use PATCH to change a due date."}, status=405)
-        allowed = {"due_date", "notes"}
+            return Response({"detail": "Use PATCH to update checkout notes."}, status=405)
+        allowed = {"notes"}
         if set(request.data) - allowed:
-            raise ValidationError({"detail": "Only due_date and notes may be changed."})
+            raise ValidationError({"detail": "Only checkout notes may be changed."})
         return super().update(request, *args, **kwargs)
 
 
 class ResolveItemView(APIView):
+    permission_classes = [IsSuperuser]
+
     @transaction.atomic
     def post(self, request, pk):
         serializer = ResolveSerializer(data=request.data)
@@ -253,12 +324,3 @@ class ResolveItemView(APIView):
         return Response({"id": item.pk, "status": item.status, "asset_status": asset.status})
 
 
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
-def dashboard(request):
-    """Provide a small summary without a reporting subsystem."""
-    counts = {key: Asset.objects.filter(status=key).count() for key, _ in Asset.Status.choices}
-    counts["overdue"] = CheckoutItem.objects.filter(
-        status=CheckoutItem.Status.OUT, checkout__due_date__lt=timezone.localdate()
-    ).count()
-    return Response(counts)
