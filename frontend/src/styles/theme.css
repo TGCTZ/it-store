@@ -1,0 +1,20 @@
+/* TGC palette adapted from service/frontend/src/styles/theme.css. */
+:root {
+  --brand-navy: #0f2743;
+  --brand-blue-mid: #112a48;
+  --brand-blue-highlight: #204b76;
+  --brand-orange: #c77530;
+  --brand-sidebar-gradient: linear-gradient(90deg, var(--brand-navy) 0%, var(--brand-blue-mid) 55%, var(--brand-blue-highlight) 100%);
+  --brand-gradient-clean: radial-gradient(ellipse at 88% 48%, rgb(80 139 186 / 22%), transparent 42%), linear-gradient(110deg, var(--brand-navy) 0%, var(--brand-blue-mid) 55%, var(--brand-blue-highlight) 100%);
+  --background: #f7fafe;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --muted: #eaf1fb;
+  --muted-foreground: #586780;
+  --border: #dbe5f3;
+  --border-strong: #c3d4ea;
+  --input: #c3d4ea;
+  --primary: #b05d25;
+  --primary-hover: #994f1f;
+  --primary-subtle: color-mix(in oklab, var(--primary) 12%, var(--card));
+}

@@ -1,0 +1,13 @@
+backend/.env
+frontend/.env
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/.vitest-temp/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/staticfiles/
+backend/*.sqlite3
+*.pyc
+.DS_Store

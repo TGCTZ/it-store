@@ -1,0 +1,190 @@
+"""People, assets and immutable lending history for the IT office."""
+
+from django.contrib.auth.base_user import BaseUserManager
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+from django.db.models import Q
+from django.db.models.functions import Lower
+from django.utils import timezone
+
+
+class UserManager(BaseUserManager):
+    """Create email-based staff accounts."""
+
+    use_in_migrations = True
+
+    def create_user(self, email, password=None, **fields):
+        if not email:
+            raise ValueError("An email address is required")
+        user = self.model(email=self.normalize_email(email), **fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **fields):
+        fields.update(role=User.Role.ADMIN, is_staff=True, is_superuser=True)
+        return self.create_user(email, password, **fields)
+
+
+class User(AbstractUser):
+    """IT staff account; borrowers are separate contacts without login access."""
+
+    class Role(models.TextChoices):
+        ADMIN = "admin", "Admin"
+        STAFF = "staff", "Staff"
+
+    username = None
+    email = models.EmailField(unique=True)
+    name = models.CharField(max_length=160)
+    role = models.CharField(max_length=8, choices=Role.choices, default=Role.STAFF)
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
+    objects = UserManager()
+
+    def __str__(self):
+        return self.name or self.email
+
+
+class Borrower(models.Model):
+    """Reusable contact details for anyone who borrows IT equipment."""
+
+    class Type(models.TextChoices):
+        EMPLOYEE = "employee", "Employee"
+        STUDENT = "student", "Student"
+        CUSTOMER = "customer", "Customer"
+        GUEST = "guest", "Guest"
+        OTHER = "other", "Other"
+
+    name = models.CharField(max_length=160)
+    phone = models.CharField(max_length=40)
+    borrower_type = models.CharField(max_length=12, choices=Type.choices, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class AssetSequence(models.Model):
+    """Single locked counter used for generated asset labels."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    next_number = models.PositiveIntegerField(default=1)
+
+
+class AccessoryOption(models.Model):
+    """Reusable accessory labels shown as checkboxes for every asset type."""
+
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+        constraints = [
+            models.UniqueConstraint(Lower("name"), name="unique_accessory_name_ci"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class Asset(models.Model):
+    """A physical device or tool with one permanent, unique identifier."""
+
+    class Status(models.TextChoices):
+        AVAILABLE = "available", "Available"
+        ON_LOAN = "on_loan", "On loan"
+        DAMAGED = "damaged", "Damaged"
+        LOST = "lost", "Lost"
+        INCOMPLETE = "incomplete", "Incomplete"
+        RETIRED = "retired", "Retired"
+
+    asset_id = models.CharField(max_length=80, unique=True)
+    name = models.CharField(max_length=160)
+    category = models.CharField(max_length=100, blank=True)
+    serial_number = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True)
+    accessories = models.ManyToManyField(AccessoryOption, related_name="assets", blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.AVAILABLE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+        constraints = [
+            models.UniqueConstraint(Lower("name"), name="unique_asset_name_ci"),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.asset_id = self.asset_id.strip().upper()
+        self.name = self.name.strip()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class Checkout(models.Model):
+    """One handover to a borrower, possibly containing several assets."""
+
+    borrower = models.ForeignKey(Borrower, on_delete=models.PROTECT, related_name="checkouts")
+    borrower_name = models.CharField(max_length=160)
+    borrower_phone = models.CharField(max_length=40)
+    issued_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="issued_checkouts")
+    issued_at = models.DateTimeField(default=timezone.now)
+    due_date = models.DateField()
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-issued_at", "-id"]
+
+    def __str__(self):
+        return f"Checkout #{self.pk} for {self.borrower_name}"
+
+
+class CheckoutItem(models.Model):
+    """Per-asset result, allowing partial returns from one checkout."""
+
+    class Status(models.TextChoices):
+        OUT = "out", "Out"
+        RETURNED = "returned", "Returned"
+        DAMAGED = "damaged", "Returned damaged"
+        LOST = "lost", "Lost"
+
+    checkout = models.ForeignKey(Checkout, on_delete=models.PROTECT, related_name="items")
+    asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name="checkout_items")
+    asset_label = models.CharField(max_length=80)
+    asset_name = models.CharField(max_length=160)
+    accessory_snapshot = models.JSONField(default=list)
+    missing_accessories = models.JSONField(default=list)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.OUT)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["asset"], condition=Q(status="out"), name="unique_open_loan_per_asset"
+            )
+        ]
+
+
+class Event(models.Model):
+    """Automatic record of material changes to a checkout or asset."""
+
+    actor = models.ForeignKey(User, on_delete=models.PROTECT)
+    checkout = models.ForeignKey(
+        Checkout, on_delete=models.PROTECT, null=True, blank=True, related_name="events"
+    )
+    asset = models.ForeignKey(
+        Asset, on_delete=models.PROTECT, null=True, blank=True, related_name="events"
+    )
+    kind = models.CharField(max_length=40)
+    details = models.JSONField(default=dict)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
