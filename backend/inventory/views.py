@@ -2,10 +2,10 @@
 
 from django.contrib.auth import authenticate
 from django.db import transaction
-from django.db.models import Count, F, Q
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action, permission_classes
+from rest_framework.decorators import permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +13,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AccessoryOption, Asset, Checkout, CheckoutItem, Event, Recipient
 from .serializers import (
+    AccessoriesReceivedSerializer,
     AccessoryOptionSerializer,
     AssetSerializer,
     CheckoutSerializer,
@@ -165,10 +166,10 @@ class PeopleViewSet(viewsets.ModelViewSet):
 
 class CheckoutViewSet(viewsets.ModelViewSet):
     serializer_class = CheckoutSerializer
-    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update", "destroy"):
+        if self.action in ("create", "update", "partial_update"):
             return [IsSuperuser()]
         return [permissions.IsAuthenticated()]
 
@@ -189,65 +190,10 @@ class CheckoutViewSet(viewsets.ModelViewSet):
                 | Q(recipient_phone__icontains=q)
                 | Q(items__asset_name__icontains=q)
             ).distinct()
-        checkout_status = self.request.query_params.get("status")
-        if checkout_status in {"in_progress", "partially_returned", "completed", "cancelled"}:
-            qs = qs.annotate(
-                item_count=Count("items", distinct=True),
-                checked_out_count=Count(
-                    "items", filter=Q(items__status=CheckoutItem.Status.CHECKED_OUT), distinct=True
-                ),
-                cancelled_count=Count(
-                    "items", filter=Q(items__status=CheckoutItem.Status.CANCELLED), distinct=True
-                ),
-            ).filter(item_count__gt=0)
-            if checkout_status == "in_progress":
-                qs = qs.filter(checked_out_count=F("item_count"))
-            elif checkout_status == "partially_returned":
-                qs = qs.filter(checked_out_count__gt=0, checked_out_count__lt=F("item_count"))
-            elif checkout_status == "completed":
-                qs = qs.filter(checked_out_count=0).exclude(cancelled_count=F("item_count"))
-            elif checkout_status == "cancelled":
-                qs = qs.filter(cancelled_count=F("item_count"))
+        item_status = self.request.query_params.get("status")
+        if item_status in CheckoutItem.Status.values:
+            qs = qs.filter(items__status=item_status).distinct()
         return qs.distinct().order_by("-issued_at", "-pk")
-
-    def _cancel_outstanding_items(self, checkout, actor):
-        items = list(
-            CheckoutItem.objects.select_for_update()
-            .select_related("asset")
-            .filter(checkout=checkout, status=CheckoutItem.Status.CHECKED_OUT)
-        )
-        if not items:
-            raise ValidationError({"detail": "This checkout has no outstanding items to cancel."})
-        now = timezone.now()
-        asset_ids = [item.asset_id for item in items]
-        for item in items:
-            item.status = CheckoutItem.Status.CANCELLED
-            item.closed_at = now
-            item.closed_by = actor
-        CheckoutItem.objects.bulk_update(items, ["status", "closed_at", "closed_by"])
-        Asset.objects.filter(pk__in=asset_ids, status=Asset.Status.CHECKED_OUT).update(
-            status=Asset.Status.AVAILABLE
-        )
-        Event.objects.create(
-            actor=actor,
-            checkout=checkout,
-            kind="checkout_cancelled",
-            details={"asset_names": [item.asset_name for item in items]},
-        )
-        return items
-
-    def destroy(self, request, *args, **kwargs):
-        checkout = self.get_object()
-        with transaction.atomic():
-            self._cancel_outstanding_items(checkout, request.user)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    @action(detail=True, methods=["post"], permission_classes=[IsSuperuser])
-    @transaction.atomic
-    def cancel(self, request, pk=None):
-        checkout = Checkout.objects.select_for_update().get(pk=pk)
-        self._cancel_outstanding_items(checkout, request.user)
-        return Response(CheckoutSerializer(checkout, context={"request": request}).data)
 
     def update(self, request, *args, **kwargs):
         if not kwargs.get("partial", False):
@@ -294,7 +240,11 @@ class ResolveItemView(APIView):
                 {"missing_accessory_ids": "Select only accessories recorded for this asset."}
             )
         missing_accessories = [snapshot_by_id[pk] for pk in missing_ids]
-        item.status = outcome
+        item.status = (
+            CheckoutItem.Status.PARTIALLY_RETURNED
+            if outcome == "returned" and missing_accessories
+            else outcome
+        )
         item.closed_at = timezone.now()
         item.closed_by = request.user
         item.notes = serializer.validated_data.get("notes", "")
@@ -329,5 +279,68 @@ class ResolveItemView(APIView):
             },
         )
         return Response({"id": item.pk, "status": item.status, "asset_status": asset.status})
+
+
+class AccessoriesReceivedView(APIView):
+    permission_classes = [IsSuperuser]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        serializer = AccessoriesReceivedSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item = (
+            CheckoutItem.objects.select_for_update()
+            .select_related("asset", "checkout")
+            .filter(pk=pk)
+            .first()
+        )
+        if not item:
+            return Response({"detail": "Item not found."}, status=404)
+        if item.status not in {
+            CheckoutItem.Status.PARTIALLY_RETURNED,
+            CheckoutItem.Status.RETURNED_DAMAGED,
+        } or not item.missing_accessories:
+            raise ValidationError({"detail": "This item has no missing accessories to record."})
+
+        snapshot_by_id = {entry["id"]: entry for entry in item.missing_accessories}
+        received_ids = set(serializer.validated_data["received_accessory_ids"])
+        if received_ids - snapshot_by_id.keys():
+            raise ValidationError(
+                {"received_accessory_ids": "Select only accessories currently marked missing."}
+            )
+        received = [entry for entry in item.missing_accessories if entry["id"] in received_ids]
+        remaining = [entry for entry in item.missing_accessories if entry["id"] not in received_ids]
+        previous_status = item.status
+        item.missing_accessories = remaining
+        if previous_status == CheckoutItem.Status.PARTIALLY_RETURNED and not remaining:
+            item.status = CheckoutItem.Status.RETURNED
+        item.save(update_fields=["missing_accessories", "status"])
+
+        asset = Asset.objects.select_for_update().get(pk=item.asset_id)
+        if remaining:
+            asset.status = Asset.Status.MISSING_ACCESSORIES
+        elif previous_status == CheckoutItem.Status.RETURNED_DAMAGED:
+            asset.status = Asset.Status.NEEDS_REPAIR
+        else:
+            asset.status = Asset.Status.AVAILABLE
+        asset.save(update_fields=["status"])
+        Event.objects.create(
+            actor=request.user,
+            checkout=item.checkout,
+            asset=asset,
+            kind="accessories_received",
+            details={
+                "received_accessories": received,
+                "remaining_missing_accessories": remaining,
+            },
+        )
+        return Response(
+            {
+                "id": item.pk,
+                "status": item.status,
+                "missing_accessories": remaining,
+                "asset_status": asset.status,
+            }
+        )
 
 

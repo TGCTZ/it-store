@@ -42,7 +42,8 @@ All routes have the `/api/v1/` prefix. Login and token refresh are public; other
 | `GET/POST accessories/`, `GET/PATCH accessories/{id}/` | Shared checkbox options; Superadmins can add, rename, or disable |
 | `GET/POST people/`, `GET/PATCH people/{id}/` | Reusable recipient contacts |
 | `GET/POST checkouts/`, `GET/PATCH checkouts/{id}/` | Create checkouts and update notes |
-| `POST checkout-items/{id}/resolve/` | Record `returned`, `damaged`, or `lost`, returned accessories, and optional notes |
+| `POST checkout-items/{id}/resolve/` | Record `returned`, `returned_damaged`, or `lost`, returned accessories, and optional notes. A returned item with missing accessories receives `partially_returned` status. |
+| `POST checkout-items/{id}/accessories-received/` | Admin records which previously missing accessories have now been received. |
 To create a checkout for someone already on file, send a recipient database ID and a nonempty list of asset database IDs:
 
 ```json
@@ -57,7 +58,7 @@ To register a recipient within the checkout, send `recipient_data` instead of `r
 
 The new contact and checkout are saved in one transaction; a failed checkout leaves no new recipient behind. Send exactly one of `recipient` and `recipient_data`.
 
-Optionally include `asset_accessories` to specify the accessory IDs going out with each selected asset. Provide one entry per asset, including an empty list when none go out; IDs must belong to that asset. When omitted, the API snapshots all configured accessories for compatibility. The API returns `400` if an asset does not exist, is unavailable, appears twice, or has an invalid accessory selection. Search the three main lists with `?q=`; filter assets and checkouts with `?status=`. Lists are paginated at 25 records per page. Use `PATCH` for changes; deletion is not exposed because it would damage lending history.
+Optionally include `asset_accessories` to specify the accessory IDs going out with each selected asset. Provide one entry per asset, including an empty list when none go out; IDs must belong to that asset. When omitted, the API snapshots all configured accessories for compatibility. The API returns `400` if an asset does not exist, is unavailable, appears twice, or has an invalid accessory selection. Search the three main lists with `?q=`; filter assets by asset status and checkouts by checkout-item status with `?status=`. A filtered checkout response includes only matching items while preserving each separate checkout record. Lists are paginated at 25 records per page. Use `PATCH` for changes; deletion is not exposed because it would damage lending history.
 
 ## Checks
 

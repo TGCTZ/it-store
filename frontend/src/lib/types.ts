@@ -1,5 +1,5 @@
 export type AssetStatus = 'available' | 'checked_out' | 'needs_repair' | 'lost' | 'missing_accessories' | 'retired'
-export type ItemStatus = 'checked_out' | 'returned' | 'returned_damaged' | 'lost' | 'cancelled'
+export type ItemStatus = 'checked_out' | 'returned' | 'partially_returned' | 'returned_damaged' | 'lost'
 
 export interface AccessoryOption {
   id: number
@@ -68,7 +68,6 @@ export interface Checkout {
   issued_at: string
   issued_by_name: string
   notes: string
-  status: 'in_progress' | 'partially_returned' | 'completed' | 'cancelled'
 }
 
 export interface Page<T> {

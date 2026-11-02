@@ -49,9 +49,11 @@ class LendingTests(APITestCase):
         )
         self.assertEqual(resolved.status_code, 200)
         self.assertEqual(Asset.objects.get(pk=first_item["asset"]).status, Asset.Status.AVAILABLE)
-        self.assertEqual(
-            self.client.get(f"/api/v1/checkouts/{created.data['id']}/").data["status"], "partially_returned"
-        )
+        checkout_detail = self.client.get(f"/api/v1/checkouts/{created.data['id']}/").data
+        item_statuses = {item["asset"]: item["status"] for item in checkout_detail["items"]}
+        self.assertNotIn("status", checkout_detail)
+        self.assertEqual(item_statuses[self.a.pk], "returned")
+        self.assertEqual(item_statuses[self.b.pk], "checked_out")
         self.assertEqual(self.checkout([first_item["asset"]]).status_code, 201)
 
     def test_damaged_and_lost_items_need_superadmin_to_restore(self):

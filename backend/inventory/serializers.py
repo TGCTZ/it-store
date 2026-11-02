@@ -217,10 +217,9 @@ class CheckoutSerializer(serializers.ModelSerializer):
     asset_accessories = AssetAccessorySelectionSerializer(
         many=True, required=False, write_only=True
     )
-    items = CheckoutItemSerializer(many=True, read_only=True)
+    items = serializers.SerializerMethodField()
     events = EventSerializer(many=True, read_only=True)
     issued_by_name = serializers.CharField(source="issued_by.name", read_only=True)
-    status = serializers.SerializerMethodField()
 
     class Meta:
         model = Checkout
@@ -238,7 +237,6 @@ class CheckoutSerializer(serializers.ModelSerializer):
             "issued_at",
             "issued_by_name",
             "notes",
-            "status",
         )
         read_only_fields = (
             "id",
@@ -249,19 +247,15 @@ class CheckoutSerializer(serializers.ModelSerializer):
             "events",
             "issued_at",
             "issued_by_name",
-            "status",
         )
 
-    def get_status(self, obj):
+    def get_items(self, obj):
         items = list(obj.items.all())
-        if items and all(item.status == CheckoutItem.Status.CANCELLED for item in items):
-            return "cancelled"
-        checked_out_count = sum(item.status == CheckoutItem.Status.CHECKED_OUT for item in items)
-        if items and checked_out_count == len(items):
-            return "in_progress"
-        if checked_out_count:
-            return "partially_returned"
-        return "completed"
+        request = self.context.get("request")
+        item_status = request.query_params.get("status") if request else None
+        if item_status in CheckoutItem.Status.values:
+            items = [item for item in items if item.status == item_status]
+        return CheckoutItemSerializer(items, many=True, context=self.context).data
 
     def validate_asset_ids(self, value):
         if len(value) != len(set(value)):
@@ -384,4 +378,15 @@ class ResolveSerializer(serializers.Serializer):
     def validate_missing_accessory_ids(self, value):
         if len(value) != len(set(value)):
             raise serializers.ValidationError("Each missing accessory may be selected only once.")
+        return value
+
+
+class AccessoriesReceivedSerializer(serializers.Serializer):
+    received_accessory_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=False
+    )
+
+    def validate_received_accessory_ids(self, value):
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("Each accessory may be selected only once.")
         return value

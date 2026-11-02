@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
+    AccessoriesReceivedView,
     AccessoryOptionViewSet,
     AssetViewSet,
     ChangePasswordView,
@@ -28,5 +29,6 @@ urlpatterns = [
     path("auth/me/", MeView.as_view()),
     path("auth/password/", ChangePasswordView.as_view()),
     path("checkout-items/<int:pk>/resolve/", ResolveItemView.as_view()),
+    path("checkout-items/<int:pk>/accessories-received/", AccessoriesReceivedView.as_view()),
     path("", include(router.urls)),
 ]

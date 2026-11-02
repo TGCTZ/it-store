@@ -145,9 +145,9 @@ class CheckoutItem(models.Model):
     class Status(models.TextChoices):
         CHECKED_OUT = "checked_out", "Checked out"
         RETURNED = "returned", "Returned"
+        PARTIALLY_RETURNED = "partially_returned", "Partially returned"
         RETURNED_DAMAGED = "returned_damaged", "Returned damaged"
         LOST = "lost", "Lost"
-        CANCELLED = "cancelled", "Cancelled"
 
     checkout = models.ForeignKey(Checkout, on_delete=models.PROTECT, related_name="items")
     asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name="checkout_items")
@@ -155,7 +155,7 @@ class CheckoutItem(models.Model):
     asset_name = models.CharField(max_length=160)
     accessory_snapshot = models.JSONField(default=list)
     missing_accessories = models.JSONField(default=list)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.CHECKED_OUT)
+    status = models.CharField(max_length=18, choices=Status.choices, default=Status.CHECKED_OUT)
     closed_at = models.DateTimeField(null=True, blank=True)
     closed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
     notes = models.TextField(blank=True)

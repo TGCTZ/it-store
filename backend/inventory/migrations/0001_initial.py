@@ -149,7 +149,7 @@ class Migration(migrations.Migration):
                 ('asset_name', models.CharField(max_length=160)),
                 ('accessory_snapshot', models.JSONField(default=list)),
                 ('missing_accessories', models.JSONField(default=list)),
-                ('status', models.CharField(choices=[('checked_out', 'Checked out'), ('returned', 'Returned'), ('returned_damaged', 'Returned damaged'), ('lost', 'Lost'), ('cancelled', 'Cancelled')], default='checked_out', max_length=16)),
+                ('status', models.CharField(choices=[('checked_out', 'Checked out'), ('returned', 'Returned'), ('partially_returned', 'Partially returned'), ('returned_damaged', 'Returned damaged'), ('lost', 'Lost')], default='checked_out', max_length=18)),
                 ('closed_at', models.DateTimeField(blank=True, null=True)),
                 ('notes', models.TextField(blank=True)),
                 ('asset', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='checkout_items', to='inventory.asset')),
