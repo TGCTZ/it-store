@@ -22,7 +22,7 @@ The production build is generated with `pnpm build` in `dist/`. The office web s
 - **Overview:** available, checked-out, overdue, incomplete, damaged, and lost counts.
 - **Assets:** searchable inventory by unique name. Admins can record included accessories from a shared checklist, manage checklist options, and resolve incomplete items.
 - **People:** reusable recipient contacts with required name and phone number.
-- **Checkouts:** search for an existing person or register a new recipient inside the creation dialog, then issue several assets together. Staff can later change a due date and confirm accessories on each return. Missing accessories leave the asset unavailable until an Admin resolves it. The detail view shows the automatic activity history.
+- **Checkouts:** search for an existing person or register a new recipient inside the creation dialog, then issue one asset per checkout. Issue another asset as a separate checkout, even for the same person. Staff can confirm accessories on return. Missing accessories leave the asset unavailable until an Admin records them received. The detail view shows the automatic activity history.
 - **Staff accounts:** visible to admins for account creation, role changes, activation, and password resets.
 
 `src/App.tsx` contains the screens and forms. `src/lib/api.ts` handles JSON requests, staff sign-in, token refresh, and session expiry; `src/lib/types.ts` describes the API data. `src/styles/theme.css` contains the retained TGC palette, while `src/styles/app.css` defines the interface layout.

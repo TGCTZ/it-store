@@ -2,10 +2,9 @@
 
 from django.contrib.auth import authenticate
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -94,7 +93,16 @@ class AssetViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        qs = Asset.objects.prefetch_related("accessories")
+        partial_items = CheckoutItem.objects.filter(
+            status__in=[
+                CheckoutItem.Status.PARTIALLY_RETURNED,
+                CheckoutItem.Status.RETURNED_DAMAGED,
+            ]
+        )
+        qs = Asset.objects.prefetch_related(
+            "accessories",
+            Prefetch("checkout_items", queryset=partial_items, to_attr="partial_checkout_items"),
+        )
         q = self.request.query_params.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -260,8 +268,6 @@ class ResolveItemView(APIView):
         )
         if outcome == "lost":
             asset.status = Asset.Status.LOST
-        elif missing_accessories:
-            asset.status = Asset.Status.MISSING_ACCESSORIES
         elif outcome == "returned_damaged":
             asset.status = Asset.Status.NEEDS_REPAIR
         else:
@@ -317,10 +323,13 @@ class AccessoriesReceivedView(APIView):
         item.save(update_fields=["missing_accessories", "status"])
 
         asset = Asset.objects.select_for_update().get(pk=item.asset_id)
-        if remaining:
-            asset.status = Asset.Status.MISSING_ACCESSORIES
-        elif previous_status == CheckoutItem.Status.RETURNED_DAMAGED:
-            asset.status = Asset.Status.NEEDS_REPAIR
+        has_checked_out_item = CheckoutItem.objects.filter(
+            asset=asset, status=CheckoutItem.Status.CHECKED_OUT
+        ).exists()
+        if has_checked_out_item:
+            asset.status = Asset.Status.CHECKED_OUT
+        elif asset.status == Asset.Status.NEEDS_REPAIR:
+            pass
         else:
             asset.status = Asset.Status.AVAILABLE
         asset.save(update_fields=["status"])

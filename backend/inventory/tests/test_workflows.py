@@ -17,12 +17,12 @@ class LendingTests(APITestCase):
         self.b = Asset.objects.create(asset_id="it-2", name="Meter")
         self.client.force_authenticate(self.superadmin)
 
-    def checkout(self, asset_ids=None):
+    def checkout(self, asset_id=None):
         return self.client.post(
             "/api/v1/checkouts/",
             {
                 "recipient": self.recipient.pk,
-                "asset_ids": asset_ids or [self.a.pk],
+                "asset_id": asset_id or self.a.pk,
             },
             format="json",
         )
@@ -35,12 +35,23 @@ class LendingTests(APITestCase):
         duplicate = self.client.post("/api/v1/assets/", {"asset_id": " it-1 ", "name": "Another"})
         self.assertEqual(duplicate.status_code, 400)
 
-    def test_multi_item_checkout_partial_return_and_no_double_loan(self):
-        created = self.checkout([self.a.pk, self.b.pk])
+    def test_one_asset_per_checkout_and_no_double_loan(self):
+        invalid_multi_asset = self.client.post(
+            "/api/v1/checkouts/",
+            {"recipient": self.recipient.pk, "asset_id": [self.a.pk, self.b.pk]},
+            format="json",
+        )
+        self.assertEqual(invalid_multi_asset.status_code, 400)
+
+        created = self.checkout(self.a.pk)
         self.assertEqual(created.status_code, 201, created.data)
-        self.assertEqual(len(created.data["items"]), 2)
+        self.assertEqual(len(created.data["items"]), 1)
         self.assertEqual(Asset.objects.get(pk=self.a.pk).status, Asset.Status.CHECKED_OUT)
-        self.assertEqual(self.checkout([self.a.pk]).status_code, 400)
+        self.assertEqual(self.checkout(self.a.pk).status_code, 400)
+        separate_checkout = self.checkout(self.b.pk)
+        self.assertEqual(separate_checkout.status_code, 201)
+        self.assertNotEqual(separate_checkout.data["id"], created.data["id"])
+        self.assertEqual(len(separate_checkout.data["items"]), 1)
         first_item = created.data["items"][0]
         resolved = self.client.post(
             f"/api/v1/checkout-items/{first_item['id']}/resolve/",
@@ -50,20 +61,19 @@ class LendingTests(APITestCase):
         self.assertEqual(resolved.status_code, 200)
         self.assertEqual(Asset.objects.get(pk=first_item["asset"]).status, Asset.Status.AVAILABLE)
         checkout_detail = self.client.get(f"/api/v1/checkouts/{created.data['id']}/").data
-        item_statuses = {item["asset"]: item["status"] for item in checkout_detail["items"]}
         self.assertNotIn("status", checkout_detail)
-        self.assertEqual(item_statuses[self.a.pk], "returned")
-        self.assertEqual(item_statuses[self.b.pk], "checked_out")
-        self.assertEqual(self.checkout([first_item["asset"]]).status_code, 201)
+        self.assertEqual(checkout_detail["items"][0]["status"], "returned")
+        self.assertEqual(self.checkout(first_item["asset"]).status_code, 201)
 
     def test_damaged_and_lost_items_need_superadmin_to_restore(self):
-        created = self.checkout([self.a.pk, self.b.pk])
-        for item, outcome, asset_status in zip(
-            created.data["items"],
+        created = [self.checkout(self.a.pk), self.checkout(self.b.pk)]
+        for checkout_response, outcome, asset_status in zip(
+            created,
             ("returned_damaged", "lost"),
             (Asset.Status.NEEDS_REPAIR, Asset.Status.LOST),
             strict=True,
         ):
+            item = checkout_response.data["items"][0]
             response = self.client.post(
                 f"/api/v1/checkout-items/{item['id']}/resolve/",
                 {"outcome": outcome, "notes": "Checked by IT"},
@@ -71,7 +81,7 @@ class LendingTests(APITestCase):
             )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(Asset.objects.get(pk=item["asset"]).status, asset_status)
-            self.assertEqual(self.checkout([item["asset"]]).status_code, 400)
+            self.assertEqual(self.checkout(item["asset"]).status_code, 400)
             self.assertEqual(
                 self.client.patch(
                     f"/api/v1/assets/{item['asset']}/", {"status": "available"}, format="json"
@@ -88,7 +98,7 @@ class LendingTests(APITestCase):
 
     def test_recipient_reused_and_permissions_enforced(self):
         self.assertEqual(self.checkout().status_code, 201)
-        self.assertEqual(self.checkout([self.b.pk]).status_code, 201)
+        self.assertEqual(self.checkout(self.b.pk).status_code, 201)
         self.assertEqual(Recipient.objects.count(), 1)
         self.assertEqual(Checkout.objects.filter(recipient=self.recipient).count(), 2)
         self.assertEqual(self.client.get("/api/v1/users/").status_code, 404)
@@ -115,7 +125,7 @@ class LendingTests(APITestCase):
                 "phone": "+255700000002",
                 "recipient_type": "guest",
             },
-            "asset_ids": [self.a.pk],
+            "asset_id": self.a.pk,
         }
         created = self.client.post("/api/v1/checkouts/", payload, format="json")
         self.assertEqual(created.status_code, 201, created.data)
@@ -137,7 +147,7 @@ class LendingTests(APITestCase):
 
     def test_checkout_requires_exactly_one_recipient_path(self):
         payload = {
-            "asset_ids": [self.a.pk],
+            "asset_id": self.a.pk,
         }
         neither = self.client.post("/api/v1/checkouts/", payload, format="json")
         self.assertEqual(neither.status_code, 400)

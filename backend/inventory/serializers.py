@@ -85,6 +85,7 @@ class AssetSerializer(serializers.ModelSerializer):
         required=False,
     )
     accessory_items = AccessoryOptionSerializer(source="accessories", many=True, read_only=True)
+    missing_accessory_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -95,10 +96,28 @@ class AssetSerializer(serializers.ModelSerializer):
             "notes",
             "accessory_ids",
             "accessory_items",
+            "missing_accessory_ids",
             "status",
             "created_at",
         )
-        read_only_fields = ("id", "created_at")
+        read_only_fields = ("id", "created_at", "missing_accessory_ids")
+
+    def get_missing_accessory_ids(self, obj):
+        partial_items = getattr(obj, "partial_checkout_items", None)
+        if partial_items is None:
+            partial_items = obj.checkout_items.filter(
+                status__in=[
+                    CheckoutItem.Status.PARTIALLY_RETURNED,
+                    CheckoutItem.Status.RETURNED_DAMAGED,
+                ]
+            )
+        return sorted(
+            {
+                accessory["id"]
+                for item in partial_items
+                for accessory in item.missing_accessories
+            }
+        )
 
     def validate_asset_id(self, value):
         value = value.strip().upper()
@@ -198,24 +217,15 @@ class CheckoutItemSerializer(serializers.ModelSerializer):
         )
 
 
-class AssetAccessorySelectionSerializer(serializers.Serializer):
-    asset = serializers.IntegerField(min_value=1)
-    accessory_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1), allow_empty=True
-    )
-
-
 class CheckoutSerializer(serializers.ModelSerializer):
     recipient = serializers.PrimaryKeyRelatedField(queryset=Recipient.objects.all(), required=False)
     recipient_data = RecipientSerializer(required=False, write_only=True)
-    asset_ids = serializers.ListField(
+    asset_id = serializers.IntegerField(min_value=1, write_only=True)
+    accessory_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=True,
         write_only=True,
-        required=True,
-        allow_empty=False,
-    )
-    asset_accessories = AssetAccessorySelectionSerializer(
-        many=True, required=False, write_only=True
     )
     items = serializers.SerializerMethodField()
     events = EventSerializer(many=True, read_only=True)
@@ -230,8 +240,8 @@ class CheckoutSerializer(serializers.ModelSerializer):
             "recipient_first_name",
             "recipient_last_name",
             "recipient_phone",
-            "asset_ids",
-            "asset_accessories",
+            "asset_id",
+            "accessory_ids",
             "items",
             "events",
             "issued_at",
@@ -257,33 +267,14 @@ class CheckoutSerializer(serializers.ModelSerializer):
             items = [item for item in items if item.status == item_status]
         return CheckoutItemSerializer(items, many=True, context=self.context).data
 
-    def validate_asset_ids(self, value):
+    def validate_accessory_ids(self, value):
         if len(value) != len(set(value)):
-            raise serializers.ValidationError("Each asset may appear only once.")
+            raise serializers.ValidationError("Each accessory may be selected only once.")
         return value
 
     def validate(self, attrs):
         if self.instance is not None:
             return attrs
-        selections = attrs.get("asset_accessories")
-        if selections is not None:
-            selected_assets = set(attrs["asset_ids"])
-            selection_asset_ids = [selection["asset"] for selection in selections]
-            if len(selection_asset_ids) != len(set(selection_asset_ids)):
-                raise serializers.ValidationError(
-                    {"asset_accessories": "Each asset may have one accessory selection."}
-                )
-            if set(selection_asset_ids) != selected_assets:
-                raise serializers.ValidationError(
-                    {"asset_accessories": "Provide accessory selections for every selected asset."}
-                )
-            if any(
-                len(selection["accessory_ids"]) != len(set(selection["accessory_ids"]))
-                for selection in selections
-            ):
-                raise serializers.ValidationError(
-                    {"asset_accessories": "Each accessory may be selected only once per asset."}
-                )
         has_recipient = attrs.get("recipient") is not None
         has_new_recipient = bool(attrs.get("recipient_data"))
         if has_recipient == has_new_recipient:
@@ -294,31 +285,42 @@ class CheckoutSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        asset_ids = validated_data.pop("asset_ids")
-        accessory_selections = validated_data.pop("asset_accessories", None)
+        asset_id = validated_data.pop("asset_id")
+        accessory_ids = validated_data.pop("accessory_ids", None)
         recipient_data = validated_data.pop("recipient_data", None)
-        assets = list(
+        asset = (
             Asset.objects.select_for_update()
             .prefetch_related("accessories")
-            .filter(pk__in=asset_ids)
-            .order_by("pk")
+            .filter(pk=asset_id)
+            .first()
         )
-        if len(assets) != len(asset_ids):
-            raise serializers.ValidationError({"asset_ids": "One or more assets do not exist."})
-        if any(asset.status != Asset.Status.AVAILABLE for asset in assets):
-            raise serializers.ValidationError({"asset_ids": "All assets must be available."})
-        selection_map = (
-            {selection["asset"]: set(selection["accessory_ids"]) for selection in accessory_selections}
-            if accessory_selections is not None
-            else None
+        if asset is None:
+            raise serializers.ValidationError({"asset_id": "This asset does not exist."})
+        if asset.status != Asset.Status.AVAILABLE:
+            raise serializers.ValidationError({"asset_id": "This asset is not available."})
+        configured_accessories = list(asset.accessories.all())
+        configured_ids = {accessory.pk for accessory in configured_accessories}
+        pending_items = asset.checkout_items.filter(
+            status__in=[
+                CheckoutItem.Status.PARTIALLY_RETURNED,
+                CheckoutItem.Status.RETURNED_DAMAGED,
+            ]
         )
-        for asset in assets:
-            if selection_map is not None:
-                configured_ids = set(asset.accessories.values_list("pk", flat=True))
-                if selection_map[asset.pk] - configured_ids:
-                    raise serializers.ValidationError(
-                        {"asset_accessories": f"An accessory is not assigned to {asset.name}."}
-                    )
+        missing_accessory_ids = {
+            accessory["id"]
+            for item in pending_items
+            for accessory in item.missing_accessories
+        }
+        selectable_ids = configured_ids - missing_accessory_ids
+        selected_accessory_ids = set(accessory_ids) if accessory_ids is not None else selectable_ids
+        if selected_accessory_ids - configured_ids:
+            raise serializers.ValidationError(
+                {"accessory_ids": f"An accessory is not assigned to {asset.name}."}
+            )
+        if selected_accessory_ids & missing_accessory_ids:
+            raise serializers.ValidationError(
+                {"accessory_ids": "Accessories still marked missing cannot be checked out."}
+            )
         recipient = validated_data.pop("recipient", None)
         if recipient_data:
             recipient = Recipient.objects.create(**recipient_data)
@@ -330,34 +332,30 @@ class CheckoutSerializer(serializers.ModelSerializer):
             recipient_phone=recipient.phone,
             issued_by=self.context["request"].user,
         )
-        CheckoutItem.objects.bulk_create(
-            [
-                CheckoutItem(
-                    checkout=checkout,
-                    asset=asset,
-                    asset_label=asset.asset_id,
-                    asset_name=asset.name,
-                    accessory_snapshot=[
-                        {"id": accessory.id, "name": accessory.name}
-                        for accessory in sorted(
-                            asset.accessories.filter(
-                                pk__in=selection_map[asset.pk]
-                                if selection_map is not None
-                                else asset.accessories.values_list("pk", flat=True)
-                            ),
-                            key=lambda option: (option.name.lower(), option.id),
-                        )
-                    ],
+        CheckoutItem.objects.create(
+            checkout=checkout,
+            asset=asset,
+            asset_label=asset.asset_id,
+            asset_name=asset.name,
+            accessory_snapshot=[
+                {"id": accessory.id, "name": accessory.name}
+                for accessory in sorted(
+                    (
+                        option
+                        for option in configured_accessories
+                        if option.pk in selected_accessory_ids
+                    ),
+                    key=lambda option: (option.name.lower(), option.id),
                 )
-                for asset in assets
-            ]
+            ],
         )
-        Asset.objects.filter(pk__in=asset_ids).update(status=Asset.Status.CHECKED_OUT)
+        asset.status = Asset.Status.CHECKED_OUT
+        asset.save(update_fields=["status"])
         Event.objects.create(
             actor=checkout.issued_by,
             checkout=checkout,
             kind="checkout_created",
-            details={"asset_names": [asset.name for asset in assets]},
+            details={"asset_names": [asset.name]},
         )
         return checkout
 

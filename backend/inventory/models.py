@@ -122,7 +122,7 @@ class Asset(models.Model):
 
 
 class Checkout(models.Model):
-    """One handover to a recipient, possibly containing several assets."""
+    """One handover of one asset to a recipient."""
 
     recipient = models.ForeignKey(Recipient, on_delete=models.PROTECT, related_name="checkouts")
     recipient_first_name = models.CharField(max_length=160)
@@ -140,7 +140,7 @@ class Checkout(models.Model):
 
 
 class CheckoutItem(models.Model):
-    """Per-asset result, allowing partial returns from one checkout."""
+    """The single asset outcome for one checkout."""
 
     class Status(models.TextChoices):
         CHECKED_OUT = "checked_out", "Checked out"
@@ -162,6 +162,7 @@ class CheckoutItem(models.Model):
 
     class Meta:
         constraints = [
+            models.UniqueConstraint(fields=["checkout"], name="unique_item_per_checkout"),
             models.UniqueConstraint(
                 fields=["asset"], condition=Q(status="checked_out"), name="unique_checked_out_asset"
             )

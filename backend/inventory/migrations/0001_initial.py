@@ -178,6 +178,10 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='checkoutitem',
+            constraint=models.UniqueConstraint(fields=('checkout',), name='unique_item_per_checkout'),
+        ),
+        migrations.AddConstraint(
+            model_name='checkoutitem',
             constraint=models.UniqueConstraint(condition=models.Q(('status', 'checked_out')), fields=('asset',), name='unique_checked_out_asset'),
         ),
         migrations.RunPython(seed_default_accessories, migrations.RunPython.noop),

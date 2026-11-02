@@ -25,6 +25,7 @@ export interface Asset {
   notes: string
   accessory_ids: number[]
   accessory_items: AccessoryOption[]
+  missing_accessory_ids: number[]
   status: AssetStatus
 }
 
