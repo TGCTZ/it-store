@@ -183,6 +183,9 @@ td small { display: block; color: var(--muted-foreground); margin-top: 3px; }
 .item-row:last-child, .event-list > div:last-child { border-bottom: 0; }
 .item-row > div { flex: 1; display: grid; gap: 2px; font-size: .84rem; }
 .item-row small { color: var(--muted-foreground); }
+.missing-accessories-alert { display: grid; gap: 3px; margin-top: 5px; padding: 8px 10px; border-left: 3px solid #c47a19; border-radius: 5px; background: #fff6e7; color: #75440a; font-size: .78rem; }
+.missing-accessories-alert strong { font-size: .77rem; }
+.missing-accessories-alert span { color: #805c30; }
 .event-list > div { display: grid; gap: 3px; border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: .8rem; }
 .event-list span, .event-list small { color: var(--muted-foreground); }
 .resolve-panel { background: #f7fafe; border: 1px solid var(--border); border-radius: 9px; padding: 17px; display: grid; gap: 11px; }
