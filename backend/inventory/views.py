@@ -190,24 +190,31 @@ class CheckoutViewSet(viewsets.ModelViewSet):
                 | Q(items__asset_name__icontains=q)
             ).distinct()
         checkout_status = self.request.query_params.get("status")
-        if checkout_status == "active":
-            qs = qs.filter(items__status=CheckoutItem.Status.OUT)
-        elif checkout_status == "closed":
-            qs = qs.exclude(items__status=CheckoutItem.Status.OUT)
-        elif checkout_status == "cancelled":
+        if checkout_status in {"in_progress", "partially_returned", "completed", "cancelled"}:
             qs = qs.annotate(
                 item_count=Count("items", distinct=True),
+                checked_out_count=Count(
+                    "items", filter=Q(items__status=CheckoutItem.Status.CHECKED_OUT), distinct=True
+                ),
                 cancelled_count=Count(
                     "items", filter=Q(items__status=CheckoutItem.Status.CANCELLED), distinct=True
                 ),
-            ).filter(item_count__gt=0, item_count=F("cancelled_count"))
+            ).filter(item_count__gt=0)
+            if checkout_status == "in_progress":
+                qs = qs.filter(checked_out_count=F("item_count"))
+            elif checkout_status == "partially_returned":
+                qs = qs.filter(checked_out_count__gt=0, checked_out_count__lt=F("item_count"))
+            elif checkout_status == "completed":
+                qs = qs.filter(checked_out_count=0).exclude(cancelled_count=F("item_count"))
+            elif checkout_status == "cancelled":
+                qs = qs.filter(cancelled_count=F("item_count"))
         return qs.distinct().order_by("-issued_at", "-pk")
 
     def _cancel_outstanding_items(self, checkout, actor):
         items = list(
             CheckoutItem.objects.select_for_update()
             .select_related("asset")
-            .filter(checkout=checkout, status=CheckoutItem.Status.OUT)
+            .filter(checkout=checkout, status=CheckoutItem.Status.CHECKED_OUT)
         )
         if not items:
             raise ValidationError({"detail": "This checkout has no outstanding items to cancel."})
@@ -263,7 +270,7 @@ class ResolveItemView(APIView):
         )
         if not item:
             return Response({"detail": "Item not found."}, status=404)
-        if item.status != CheckoutItem.Status.OUT:
+        if item.status != CheckoutItem.Status.CHECKED_OUT:
             raise ValidationError({"detail": "This item was already resolved."})
         asset = Asset.objects.select_for_update().get(pk=item.asset_id)
         outcome = serializer.validated_data["outcome"]
@@ -304,9 +311,9 @@ class ResolveItemView(APIView):
         if outcome == "lost":
             asset.status = Asset.Status.LOST
         elif missing_accessories:
-            asset.status = Asset.Status.INCOMPLETE
-        elif outcome == "damaged":
-            asset.status = Asset.Status.DAMAGED
+            asset.status = Asset.Status.MISSING_ACCESSORIES
+        elif outcome == "returned_damaged":
+            asset.status = Asset.Status.NEEDS_REPAIR
         else:
             asset.status = Asset.Status.AVAILABLE
         asset.save(update_fields=["status"])

@@ -23,9 +23,20 @@ DEFAULT_ACCESSORIES = (
 
 def seed_default_accessories(apps, schema_editor):
     accessory_model = apps.get_model("inventory", "AccessoryOption")
+    asset_model = apps.get_model("inventory", "Asset")
+    sequence_model = apps.get_model("inventory", "AssetSequence")
     database = schema_editor.connection.alias
     accessory_model.objects.using(database).bulk_create(
         [accessory_model(name=name) for name in DEFAULT_ACCESSORIES]
+    )
+    asset_model.objects.using(database).bulk_create(
+        [
+            asset_model(asset_id=f"TGC-IT-{number:06d}", name=f"Projector {number}")
+            for number in range(1, 4)
+        ]
+    )
+    sequence_model.objects.using(database).update_or_create(
+        pk=1, defaults={"next_number": 4}
     )
 
 
@@ -106,7 +117,7 @@ class Migration(migrations.Migration):
                 ('category', models.CharField(blank=True, max_length=100)),
                 ('serial_number', models.CharField(blank=True, max_length=120)),
                 ('notes', models.TextField(blank=True)),
-                ('status', models.CharField(choices=[('available', 'Available'), ('checked_out', 'Checked out'), ('damaged', 'Damaged'), ('lost', 'Lost'), ('incomplete', 'Incomplete'), ('retired', 'Retired')], default='available', max_length=16)),
+                ('status', models.CharField(choices=[('available', 'Available'), ('checked_out', 'Checked out'), ('needs_repair', 'Needs repair'), ('lost', 'Lost'), ('missing_accessories', 'Missing accessories'), ('retired', 'Retired')], default='available', max_length=24)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('accessories', models.ManyToManyField(blank=True, related_name='assets', to='inventory.accessoryoption')),
             ],
@@ -138,7 +149,7 @@ class Migration(migrations.Migration):
                 ('asset_name', models.CharField(max_length=160)),
                 ('accessory_snapshot', models.JSONField(default=list)),
                 ('missing_accessories', models.JSONField(default=list)),
-                ('status', models.CharField(choices=[('out', 'Out'), ('returned', 'Returned'), ('damaged', 'Returned damaged'), ('lost', 'Lost'), ('cancelled', 'Cancelled')], default='out', max_length=9)),
+                ('status', models.CharField(choices=[('checked_out', 'Checked out'), ('returned', 'Returned'), ('returned_damaged', 'Returned damaged'), ('lost', 'Lost'), ('cancelled', 'Cancelled')], default='checked_out', max_length=16)),
                 ('closed_at', models.DateTimeField(blank=True, null=True)),
                 ('notes', models.TextField(blank=True)),
                 ('asset', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='checkout_items', to='inventory.asset')),
@@ -167,7 +178,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='checkoutitem',
-            constraint=models.UniqueConstraint(condition=models.Q(('status', 'out')), fields=('asset',), name='unique_open_loan_per_asset'),
+            constraint=models.UniqueConstraint(condition=models.Q(('status', 'checked_out')), fields=('asset',), name='unique_checked_out_asset'),
         ),
         migrations.RunPython(seed_default_accessories, migrations.RunPython.noop),
     ]

@@ -92,9 +92,9 @@ class Asset(models.Model):
     class Status(models.TextChoices):
         AVAILABLE = "available", "Available"
         CHECKED_OUT = "checked_out", "Checked out"
-        DAMAGED = "damaged", "Damaged"
+        NEEDS_REPAIR = "needs_repair", "Needs repair"
         LOST = "lost", "Lost"
-        INCOMPLETE = "incomplete", "Incomplete"
+        MISSING_ACCESSORIES = "missing_accessories", "Missing accessories"
         RETIRED = "retired", "Retired"
 
     asset_id = models.CharField(max_length=80, unique=True)
@@ -103,7 +103,7 @@ class Asset(models.Model):
     serial_number = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
     accessories = models.ManyToManyField(AccessoryOption, related_name="assets", blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.AVAILABLE)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.AVAILABLE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -143,9 +143,9 @@ class CheckoutItem(models.Model):
     """Per-asset result, allowing partial returns from one checkout."""
 
     class Status(models.TextChoices):
-        OUT = "out", "Out"
+        CHECKED_OUT = "checked_out", "Checked out"
         RETURNED = "returned", "Returned"
-        DAMAGED = "damaged", "Returned damaged"
+        RETURNED_DAMAGED = "returned_damaged", "Returned damaged"
         LOST = "lost", "Lost"
         CANCELLED = "cancelled", "Cancelled"
 
@@ -155,7 +155,7 @@ class CheckoutItem(models.Model):
     asset_name = models.CharField(max_length=160)
     accessory_snapshot = models.JSONField(default=list)
     missing_accessories = models.JSONField(default=list)
-    status = models.CharField(max_length=9, choices=Status.choices, default=Status.OUT)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.CHECKED_OUT)
     closed_at = models.DateTimeField(null=True, blank=True)
     closed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
     notes = models.TextField(blank=True)
@@ -163,7 +163,7 @@ class CheckoutItem(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["asset"], condition=Q(status="out"), name="unique_open_loan_per_asset"
+                fields=["asset"], condition=Q(status="checked_out"), name="unique_checked_out_asset"
             )
         ]
 

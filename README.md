@@ -21,11 +21,11 @@ For an office-network deployment, configure a production WSGI server and static 
 
 ## Daily workflow
 
-1. A Superadmin registers each physical asset with a unique name, such as `Projector 1`. The app generates and keeps its internal ID out of the interface.
+1. The clean initial migration seeds `Projector 1`, `Projector 2`, and `Projector 3` as available assets. A Superadmin can add more physical assets with unique names; the app generates and keeps each internal ID out of the interface.
 2. Superadmins maintain a shared accessory checklist, seeded with power cables, chargers, common cables, remotes, cases, and batteries. When registering an asset, a Superadmin checks the accessories included with it; the same options can be used for any asset type.
 3. A Superadmin creates a checkout by finding an existing person or registering a new recipient in the same form. New contacts require a name and phone number and can be reused.
 4. The Superadmin selects one or more available assets before creating the checkout. Each selected asset shows its configured accessories as checked boxes; accessories staying in the office can be unchecked. Only checked accessories are recorded as going out and confirmed on return.
-5. On return, a Superadmin confirms each asset’s listed accessories and records the outcome. Missing accessories make the asset incomplete and unavailable until a Superadmin resolves it; damaged and lost assets also remain unavailable until a Superadmin changes their status.
+5. On return, a Superadmin confirms each asset’s listed accessories and records the outcome. Asset statuses are Available, Checked out, Missing accessories, Needs repair, Lost, or Retired. Checkout statuses are In progress, Partially returned, Completed, or Cancelled. Missing accessories or damage keep an asset unavailable until a Superadmin resolves it; lost assets also remain unavailable until restored.
 The system has one Superadmin login. Account creation and management are not available in the app, API, or Django admin; initialize the account with `createsuperuser`. The Superadmin can change their own password. Asset names are unique; the internal asset ID is generated automatically and is not shown in the interface. All API endpoints require authentication except login and token refresh. Recipients do not sign in; there are no automatic messages, receipts, signatures, or import process.
 
 ## API

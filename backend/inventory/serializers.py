@@ -137,7 +137,7 @@ class AssetSerializer(serializers.ModelSerializer):
                 )
         if (
             self.instance
-            and self.instance.status == Asset.Status.INCOMPLETE
+            and self.instance.status == Asset.Status.MISSING_ACCESSORIES
             and attrs.get("status") == Asset.Status.AVAILABLE
             and "accessories" not in attrs
         ):
@@ -256,9 +256,12 @@ class CheckoutSerializer(serializers.ModelSerializer):
         items = list(obj.items.all())
         if items and all(item.status == CheckoutItem.Status.CANCELLED for item in items):
             return "cancelled"
-        if any(item.status == CheckoutItem.Status.OUT for item in items):
-            return "active"
-        return "closed"
+        checked_out_count = sum(item.status == CheckoutItem.Status.CHECKED_OUT for item in items)
+        if items and checked_out_count == len(items):
+            return "in_progress"
+        if checked_out_count:
+            return "partially_returned"
+        return "completed"
 
     def validate_asset_ids(self, value):
         if len(value) != len(set(value)):
@@ -372,7 +375,7 @@ class CheckoutSerializer(serializers.ModelSerializer):
 
 
 class ResolveSerializer(serializers.Serializer):
-    outcome = serializers.ChoiceField(choices=["returned", "damaged", "lost"])
+    outcome = serializers.ChoiceField(choices=["returned", "returned_damaged", "lost"])
     notes = serializers.CharField(required=False, allow_blank=True)
     missing_accessory_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1), required=False, allow_empty=True
