@@ -68,7 +68,7 @@ export interface Checkout {
   issued_at: string
   issued_by_name: string
   notes: string
-  status: 'active' | 'partially_returned' | 'closed' | 'cancelled'
+  status: 'in_progress' | 'partially_returned' | 'completed' | 'cancelled'
 }
 
 export interface Page<T> {

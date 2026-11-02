@@ -70,8 +70,8 @@ td small { display: block; color: var(--muted-foreground); margin-top: 3px; }
 .strong { font-weight: 650; }
 .empty { padding: 22px; color: var(--muted-foreground); text-align: center; }
 .badge { display: inline-block; border-radius: 999px; background: #edf3f8; color: #254462; padding: 5px 10px; font-size: .72rem; font-weight: 700; text-transform: capitalize; white-space: nowrap; }
-.badge-available, .badge-returned, .badge-closed { color: #11614b; background: #e4f5ee; }
-.badge-checked-out, .badge-active { color: #285b8c; background: #e7f1fc; }
+.badge-available, .badge-returned, .badge-completed { color: #11614b; background: #e4f5ee; }
+.badge-checked-out, .badge-in-progress { color: #285b8c; background: #e7f1fc; }
 .badge-lost { color: #a3382b; background: #ffebe7; }
 .badge-returned-damaged, .badge-needs-repair, .badge-missing-accessories { color: #95570f; background: #fff1d9; }
 .badge-cancelled { color: #58677b; background: #edf1f5; }

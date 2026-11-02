@@ -190,7 +190,7 @@ class CheckoutViewSet(viewsets.ModelViewSet):
                 | Q(items__asset_name__icontains=q)
             ).distinct()
         checkout_status = self.request.query_params.get("status")
-        if checkout_status in {"active", "partially_returned", "closed", "cancelled"}:
+        if checkout_status in {"in_progress", "partially_returned", "completed", "cancelled"}:
             qs = qs.annotate(
                 item_count=Count("items", distinct=True),
                 checked_out_count=Count(
@@ -200,11 +200,11 @@ class CheckoutViewSet(viewsets.ModelViewSet):
                     "items", filter=Q(items__status=CheckoutItem.Status.CANCELLED), distinct=True
                 ),
             ).filter(item_count__gt=0)
-            if checkout_status == "active":
+            if checkout_status == "in_progress":
                 qs = qs.filter(checked_out_count=F("item_count"))
             elif checkout_status == "partially_returned":
                 qs = qs.filter(checked_out_count__gt=0, checked_out_count__lt=F("item_count"))
-            elif checkout_status == "closed":
+            elif checkout_status == "completed":
                 qs = qs.filter(checked_out_count=0).exclude(cancelled_count=F("item_count"))
             elif checkout_status == "cancelled":
                 qs = qs.filter(cancelled_count=F("item_count"))
