@@ -258,10 +258,10 @@ class CheckoutSerializer(serializers.ModelSerializer):
             return "cancelled"
         checked_out_count = sum(item.status == CheckoutItem.Status.CHECKED_OUT for item in items)
         if items and checked_out_count == len(items):
-            return "in_progress"
+            return "active"
         if checked_out_count:
             return "partially_returned"
-        return "completed"
+        return "closed"
 
     def validate_asset_ids(self, value):
         if len(value) != len(set(value)):
