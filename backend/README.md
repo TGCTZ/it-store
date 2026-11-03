@@ -6,7 +6,7 @@ See the [project README](../README.md) for the full workflow and deployment stat
 
 ## Set up locally
 
-From this directory, create `.env` from `.env.example` and set a PostgreSQL `DATABASE_URL`, a long random `SECRET_KEY`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` out of version control. `TIME_ZONE` defaults to `Africa/Dar_es_Salaam` for timestamps.
+For a standalone Windows PC, use the project-level `Setup IT Store.bat`; it creates a private `.env` and a local SQLite database if no configuration exists. For PostgreSQL, create `.env` from `.env.example` and set `DATABASE_URL`, a long random `SECRET_KEY`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` out of version control. `TIME_ZONE` defaults to `Africa/Dar_es_Salaam` for timestamps.
 
 ```powershell
 Copy-Item .env.example .env

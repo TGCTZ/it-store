@@ -4,18 +4,19 @@ A small office-network app for lending individually identified IT devices and to
 
 For component-specific setup and maintenance details, see the [backend README](backend/README.md) and [frontend README](frontend/README.md).
 
-## Requirements
+## Windows PC setup
 
-- Python 3.13 or newer, [uv](https://docs.astral.sh/uv/), Node.js 24 or newer, and pnpm
-- PostgreSQL for normal operation
+Install Python 3.13 or newer, [uv](https://docs.astral.sh/uv/), Node.js 24 or newer, and pnpm on the PC. Copy this project folder onto that PC, then double-click `Setup IT Store.bat` once. It installs project packages, creates a local SQLite database and a private `.env` when none exists, applies migrations, prompts you to create that PC's Superadmin account, and adds IT Store to the Windows Startup folder. IT Store starts in the background and opens in a browser after you sign in to Windows. The API and frontend bind to `127.0.0.1` and are available only on that PC.
+
+Each separate installation has its own database, people, assets, and checkout history. Changes made on one PC do not appear on other PCs. This per-PC setup is for standalone use; a shared office database requires a separately configured central host.
+
+The setup script preserves an existing `backend/.env`. For a PostgreSQL install, configure that file and ensure PostgreSQL is installed and running before running the setup. `.env` files and SQLite databases are private local data and must not be copied into source control.
 
 ## Local setup
 
-1. Create an empty PostgreSQL database and a user with access to it. Since this project now uses one clean initial migration, drop and recreate any older development database before applying it.
-2. In `backend`, copy `.env.example` to `.env`. Set `SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS` for your computer. Never commit `.env`.
-3. Use a fresh development database, then run `uv sync`, `uv run python manage.py migrate`, and `uv run python manage.py createsuperuser` to create the one login account. Recreate the existing superuser with the same email if desired; its old database row is removed by the reset.
-4. Start the API with `uv run python manage.py runserver 0.0.0.0:8000`.
-5. In `frontend`, run `pnpm install` and `pnpm dev`. Open the address printed by Vite and sign in with the Superadmin account. The development server proxies `/api` to `localhost:8000`.
+For manual development, set `backend/.env`, then run `uv sync`, `uv run python manage.py migrate`, and `uv run python manage.py createsuperuser` from `backend`. In `frontend`, run `pnpm install` and `pnpm dev`. The frontend proxies `/api` to the local API.
+
+The setup script installs automatic startup for the current Windows account. Windows opens the browser after you sign in; it cannot display the app before login. To remove automatic startup, run `scripts/Uninstall-AutoStart.ps1` on that PC. Startup logs are saved in `%LOCALAPPDATA%\TGC\ITStore\logs`.
 
 For an office-network deployment, configure a production WSGI server and static web server after the host operating system is selected. Use `DEBUG=False`, a strong secret key, appropriate host and origin lists, HTTPS where possible, and regular PostgreSQL backups. The Django development server and Vite development server are for development only.
 
