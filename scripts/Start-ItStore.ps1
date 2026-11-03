@@ -8,7 +8,9 @@ $vite = Join-Path $frontendRoot 'node_modules\vite\bin\vite.js'
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 $stateRoot = Join-Path $env:LOCALAPPDATA 'TGC\ITStore'
 $logsRoot = Join-Path $stateRoot 'logs'
-$webUrl = 'http://127.0.0.1:5173'
+$apiPort = 18473
+$webPort = 18474
+$webUrl = "http://127.0.0.1:$webPort"
 $env:VITE_API_URL = '/api/v1'
 
 New-Item -ItemType Directory -Path $logsRoot -Force | Out-Null
@@ -62,28 +64,28 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $apiProcess = $null
-if (-not (Test-Port 8000)) {
+if (-not (Test-Port $apiPort)) {
     $apiProcess = Start-Process -FilePath $python `
-        -ArgumentList @('"' + (Join-Path $backendRoot 'manage.py') + '"', 'runserver', '127.0.0.1:8000', '--noreload') `
+        -ArgumentList @('"' + (Join-Path $backendRoot 'manage.py') + '"', 'runserver', "127.0.0.1:$apiPort", '--noreload') `
         -WorkingDirectory $backendRoot -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $logsRoot 'api.out.log') `
         -RedirectStandardError (Join-Path $logsRoot 'api.err.log')
 }
 
 $webProcess = $null
-if (-not (Test-Port 5173)) {
+if (-not (Test-Port $webPort)) {
     $webProcess = Start-Process -FilePath $nodeCommand.Source `
-        -ArgumentList @('"' + $vite + '"', '--host', '127.0.0.1', '--port', '5173', '--strictPort') `
+        -ArgumentList @('"' + $vite + '"', '--host', '127.0.0.1', '--port', "$webPort", '--strictPort') `
         -WorkingDirectory $frontendRoot -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $logsRoot 'web.out.log') `
         -RedirectStandardError (Join-Path $logsRoot 'web.err.log')
 }
 
-if (-not (Wait-ForPort 8000 $apiProcess)) {
+if (-not (Wait-ForPort $apiPort $apiProcess)) {
     Show-StartupError 'The API did not start. Check api.err.log for details.'
     exit 1
 }
-if (-not (Wait-ForPort 5173 $webProcess)) {
+if (-not (Wait-ForPort $webPort $webProcess)) {
     Show-StartupError 'The website did not start. Check web.err.log for details.'
     exit 1
 }

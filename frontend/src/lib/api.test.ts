@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, clearTokens, hasSession, login, saveTokens } from './api'
 
 const storage = new Map<string, string>()
-const sessionStorageMock = {
+const localStorageMock = {
   getItem: (key: string) => storage.get(key) ?? null,
   setItem: (key: string, value: string) => { storage.set(key, value) },
   removeItem: (key: string) => { storage.delete(key) },
@@ -11,7 +11,7 @@ const sessionStorageMock = {
 beforeEach(() => {
   storage.clear()
   vi.unstubAllGlobals()
-  vi.stubGlobal('sessionStorage', sessionStorageMock)
+  vi.stubGlobal('localStorage', localStorageMock)
 })
 
 describe('API session', () => {

@@ -6,11 +6,11 @@ For component-specific setup and maintenance details, see the [backend README](b
 
 ## Windows PC setup
 
-Install Python 3.13 or newer, [uv](https://docs.astral.sh/uv/), Node.js 24 or newer, and pnpm on the PC. Copy this project folder onto that PC, then double-click `Setup IT Store.bat` once. It installs project packages, creates a local SQLite database and a private `.env` when none exists, applies migrations, prompts you to create that PC's Superadmin account, and adds IT Store to the Windows Startup folder. IT Store starts in the background and opens in a browser after you sign in to Windows. The API and frontend bind to `127.0.0.1` and are available only on that PC.
+Install Python 3.13 or newer, [uv](https://docs.astral.sh/uv/), Node.js 24 or newer, pnpm, and PostgreSQL on the PC. Copy this project folder onto that PC, then double-click `Setup IT Store.bat` once. It installs project packages, prompts for the PostgreSQL `postgres` password, creates a local `itstore` database plus a private `.env` when none exists, applies migrations, prompts you to create that PC's Superadmin account, and adds IT Store to the Windows Startup folder. IT Store starts in the background and opens at `http://127.0.0.1:18474` after you sign in to Windows. The API uses port `18473`; both servers bind to `127.0.0.1` and are available only on that PC.
 
 Each separate installation has its own database, people, assets, and checkout history. Changes made on one PC do not appear on other PCs. This per-PC setup is for standalone use; a shared office database requires a separately configured central host.
 
-The setup script preserves an existing `backend/.env`. For a PostgreSQL install, configure that file and ensure PostgreSQL is installed and running before running the setup. `.env` files and SQLite databases are private local data and must not be copied into source control.
+The setup script preserves an existing `backend/.env`. PostgreSQL must be installed and running locally on port `5432`. If the `itstore` database already exists, the installer stops rather than overwriting or reusing it; configure `backend/.env` manually in that case. `.env` files and database data are private local data and must not be copied into source control.
 
 ## Local setup
 

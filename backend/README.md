@@ -6,14 +6,14 @@ See the [project README](../README.md) for the full workflow and deployment stat
 
 ## Set up locally
 
-For a standalone Windows PC, use the project-level `Setup IT Store.bat`; it creates a private `.env` and a local SQLite database if no configuration exists. For PostgreSQL, create `.env` from `.env.example` and set `DATABASE_URL`, a long random `SECRET_KEY`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` out of version control. `TIME_ZONE` defaults to `Africa/Dar_es_Salaam` for timestamps.
+For a standalone Windows PC, use the project-level `Setup IT Store.bat`; it creates a local PostgreSQL database named `itstore` using the `postgres` account and writes a private `.env` if no configuration exists. For a manual setup, create `.env` from `.env.example` and set `DATABASE_URL`, a long random `SECRET_KEY`, `ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` out of version control. `TIME_ZONE` defaults to `Africa/Dar_es_Salaam` for timestamps.
 
 ```powershell
 Copy-Item .env.example .env
 uv sync
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
-uv run python manage.py runserver 0.0.0.0:8000
+uv run python manage.py runserver 127.0.0.1:18473
 ```
 
 Drop and recreate an old development database before applying the consolidated initial migration. Then `createsuperuser` initializes the one login account. The app, API, and Django admin provide no account creation or management. The account can change its own password. The development server is for local use; select a production WSGI host when the office server operating system is known.

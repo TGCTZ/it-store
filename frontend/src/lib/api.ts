@@ -4,6 +4,16 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
 const ACCESS_KEY = 'itstore_access'
 const REFRESH_KEY = 'itstore_refresh'
 
+if (typeof window !== 'undefined') {
+  for (const key of [ACCESS_KEY, REFRESH_KEY]) {
+    const previousToken = window.sessionStorage.getItem(key)
+    if (previousToken && !window.localStorage.getItem(key)) {
+      window.localStorage.setItem(key, previousToken)
+    }
+    window.sessionStorage.removeItem(key)
+  }
+}
+
 export class ApiError extends Error {
   constructor(public status: number, public details: unknown) {
     super(errorMessage(details))
@@ -18,13 +28,13 @@ export function errorMessage(details: unknown): string {
 }
 
 export function saveTokens(access: string, refresh: string) {
-  sessionStorage.setItem(ACCESS_KEY, access)
-  sessionStorage.setItem(REFRESH_KEY, refresh)
+  localStorage.setItem(ACCESS_KEY, access)
+  localStorage.setItem(REFRESH_KEY, refresh)
 }
 
 export function clearTokens() {
-  sessionStorage.removeItem(ACCESS_KEY)
-  sessionStorage.removeItem(REFRESH_KEY)
+  localStorage.removeItem(ACCESS_KEY)
+  localStorage.removeItem(REFRESH_KEY)
 }
 
 function expireSession() {
@@ -33,7 +43,7 @@ function expireSession() {
 }
 
 export function hasSession() {
-  return Boolean(sessionStorage.getItem(REFRESH_KEY))
+  return Boolean(localStorage.getItem(REFRESH_KEY))
 }
 
 let refreshInFlight: Promise<string | null> | null = null
@@ -41,7 +51,7 @@ let refreshInFlight: Promise<string | null> | null = null
 async function refreshAccess(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight
   refreshInFlight = (async () => {
-    const refresh = sessionStorage.getItem(REFRESH_KEY)
+    const refresh = localStorage.getItem(REFRESH_KEY)
     if (!refresh) return null
     try {
       const response = await fetch(`${API_BASE}/auth/refresh/`, {
@@ -71,7 +81,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   })
-  let response = await send(sessionStorage.getItem(ACCESS_KEY))
+  let response = await send(localStorage.getItem(ACCESS_KEY))
   if (response.status === 401 && !path.startsWith('/auth/')) {
     const newAccess = await refreshAccess()
     if (newAccess) response = await send(newAccess)
@@ -92,7 +102,7 @@ export async function login(email: string, password: string): Promise<User> {
 }
 
 export async function logout() {
-  const refresh = sessionStorage.getItem(REFRESH_KEY)
+  const refresh = localStorage.getItem(REFRESH_KEY)
   try {
     await api('/auth/logout/', { method: 'POST', body: JSON.stringify({ refresh }) })
   } finally {

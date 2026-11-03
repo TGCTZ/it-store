@@ -13,7 +13,7 @@ pnpm install
 pnpm dev
 ```
 
-Open the URL printed by Vite. Its development server proxies `/api` to `http://localhost:8000`. If the API is at another address, copy `.env.example` to `.env` and set `VITE_API_URL` to the full `/api/v1` URL. When the frontend and API have different origins, add the frontend origin to the backend's `CORS_ALLOWED_ORIGINS`.
+Open `http://127.0.0.1:18474`. The development server proxies `/api` to the local API on port `18473`. If the API is at another address, set the Vite proxy target in `vite.config.ts`; if using a direct cross-origin API URL, add the frontend origin to the backend's `CORS_ALLOWED_ORIGINS`.
 
 The production build is generated with `pnpm build` in `dist/`. The office web server can serve those static files once a deployment host has been selected. Do not commit `dist/`, `node_modules/`, or `.env`.
 
@@ -27,7 +27,7 @@ The production build is generated with `pnpm build` in `dist/`. The office web s
 
 `src/App.tsx` contains the screens and forms. `src/lib/api.ts` handles JSON requests, staff sign-in, token refresh, and session expiry; `src/lib/types.ts` describes the API data. `src/styles/theme.css` contains the retained TGC palette, while `src/styles/app.css` defines the interface layout.
 
-Tokens live in browser `sessionStorage`, so closing the tab ends the browser session. The API issues the tokens; the frontend retries a protected request once after refreshing an expired access token. The API enforces permissions even if a user bypasses the interface. Recipients never sign in.
+Tokens live in browser `localStorage`, so closing and reopening the browser does not sign the Superadmin out. The refresh token expires after 30 days without renewal; normal use rotates it and renews that window. Signing out removes the saved tokens. The frontend retries a protected request once after refreshing an expired access token. The API enforces permissions even if a user bypasses the interface. Recipients never sign in.
 
 ## Checks
 
