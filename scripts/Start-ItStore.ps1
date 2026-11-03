@@ -8,8 +8,8 @@ $vite = Join-Path $frontendRoot 'node_modules\vite\bin\vite.js'
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 $stateRoot = Join-Path $env:LOCALAPPDATA 'TGC\ITStore'
 $logsRoot = Join-Path $stateRoot 'logs'
-$apiPort = 18473
-$webPort = 18474
+$apiPort = 334
+$webPort = 333
 $webUrl = "http://127.0.0.1:$webPort"
 $env:VITE_API_URL = '/api/v1'
 

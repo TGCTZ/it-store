@@ -13,7 +13,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:18474`. The development server proxies `/api` to the local API on port `18473`. If the API is at another address, set the Vite proxy target in `vite.config.ts`; if using a direct cross-origin API URL, add the frontend origin to the backend's `CORS_ALLOWED_ORIGINS`.
+Open `http://127.0.0.1:333`. The development server proxies `/api` to the local API on port `334`. If the API is at another address, set the Vite proxy target in `vite.config.ts`; if using a direct cross-origin API URL, add the frontend origin to the backend's `CORS_ALLOWED_ORIGINS`.
 
 The production build is generated with `pnpm build` in `dist/`. The office web server can serve those static files once a deployment host has been selected. Do not commit `dist/`, `node_modules/`, or `.env`.
 

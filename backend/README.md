@@ -13,7 +13,7 @@ Copy-Item .env.example .env
 uv sync
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
-uv run python manage.py runserver 127.0.0.1:18473
+uv run python manage.py runserver 127.0.0.1:334
 ```
 
 Drop and recreate an old development database before applying the consolidated initial migration. Then `createsuperuser` initializes the one login account. The app, API, and Django admin provide no account creation or management. The account can change its own password. The development server is for local use; select a production WSGI host when the office server operating system is known.

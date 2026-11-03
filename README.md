@@ -6,7 +6,7 @@ For component-specific setup and maintenance details, see the [backend README](b
 
 ## Windows PC setup
 
-Install Python 3.13 or newer, [uv](https://docs.astral.sh/uv/), Node.js 24 or newer, pnpm, and PostgreSQL on the PC. Copy this project folder onto that PC, then double-click `Setup IT Store.bat` once. It installs project packages, prompts for the PostgreSQL `postgres` password, creates a local `itstore` database plus a private `.env` when none exists, applies migrations, prompts you to create that PC's Superadmin account, and adds IT Store to the Windows Startup folder. IT Store starts in the background and opens at `http://127.0.0.1:18474` after you sign in to Windows. The API uses port `18473`; both servers bind to `127.0.0.1` and are available only on that PC.
+Install Python 3.13 or newer, [uv](https://docs.astral.sh/uv/), Node.js 24 or newer, pnpm, and PostgreSQL on the PC. Copy this project folder onto that PC, then double-click `Setup IT Store.bat` once. It installs project packages, prompts for the PostgreSQL `postgres` password, creates a local `itstore` database plus a private `.env` when none exists, applies migrations, prompts you to create that PC's Superadmin account, and adds IT Store to the Windows Startup folder. IT Store starts in the background and opens at `http://127.0.0.1:333` after you sign in to Windows. The API uses port `334`; both servers bind to `127.0.0.1` and are available only on that PC.
 
 Each separate installation has its own database, people, assets, and checkout history. Changes made on one PC do not appear on other PCs. This per-PC setup is for standalone use; a shared office database requires a separately configured central host.
 
@@ -17,6 +17,8 @@ The setup script preserves an existing `backend/.env`. PostgreSQL must be instal
 For manual development, set `backend/.env`, then run `uv sync`, `uv run python manage.py migrate`, and `uv run python manage.py createsuperuser` from `backend`. In `frontend`, run `pnpm install` and `pnpm dev`. The frontend proxies `/api` to the local API.
 
 The setup script installs automatic startup for the current Windows account. Windows opens the browser after you sign in; it cannot display the app before login. To remove automatic startup, run `scripts/Uninstall-AutoStart.ps1` on that PC. Startup logs are saved in `%LOCALAPPDATA%\TGC\ITStore\logs`.
+
+To restart the running servers now, double-click `Restart IT Store.bat`. It closes only this project's Django and Vite processes, then opens IT Store at `http://127.0.0.1:333`.
 
 For an office-network deployment, configure a production WSGI server and static web server after the host operating system is selected. Use `DEBUG=False`, a strong secret key, appropriate host and origin lists, HTTPS where possible, and regular PostgreSQL backups. The Django development server and Vite development server are for development only.
 

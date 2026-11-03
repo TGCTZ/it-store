@@ -42,7 +42,7 @@ SECRET_KEY=$secretKey
 DEBUG=True
 DATABASE_URL=$databaseUrl
 ALLOWED_HOSTS=localhost,127.0.0.1
-CORS_ALLOWED_ORIGINS=http://localhost:18474,http://127.0.0.1:18474
+CORS_ALLOWED_ORIGINS=http://localhost:333,http://127.0.0.1:333
 TIME_ZONE=Africa/Dar_es_Salaam
 "@
             [System.IO.File]::WriteAllText(
