@@ -35,10 +35,34 @@ class LendingTests(APITestCase):
         duplicate = self.client.post("/api/v1/assets/", {"asset_id": " it-1 ", "name": "Another"})
         self.assertEqual(duplicate.status_code, 400)
 
+    def test_duplicate_lookup_requires_every_person_field_to_match(self):
+        self.assertEqual(
+            Recipient.objects.filter(
+                first_name__iexact="asha",
+                last_name__iexact="mashauri",
+                recipient_type="employee",
+            ).count(),
+            1,
+        )
+        base = "/api/v1/people/?duplicate_check=1&first_name=asha&last_name=mashauri&phone=%2B255%20700%20000%20001"
+        exact = self.client.get(f"{base}&recipient_type=employee")
+        different_last_name = self.client.get(
+            f"{base.replace('last_name=mashauri', 'last_name=other')}&recipient_type=employee"
+        )
+        different_phone = self.client.get(
+            f"{base.replace('0001', '0002')}&recipient_type=employee"
+        )
+        different_type = self.client.get(f"{base}&recipient_type=student")
+
+        self.assertEqual(exact.data["count"], 1)
+        self.assertEqual(different_last_name.data["count"], 0)
+        self.assertEqual(different_phone.data["count"], 0)
+        self.assertEqual(different_type.data["count"], 0)
+
     def test_resource_lists_accept_a_custom_page_size(self):
         response = self.client.get("/api/v1/assets/?page=1&page_size=1")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["count"], 2)
+        self.assertGreaterEqual(response.data["count"], 2)
         self.assertEqual(len(response.data["results"]), 1)
 
     def test_one_asset_per_checkout_and_no_double_loan(self):

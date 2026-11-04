@@ -215,8 +215,47 @@ function PersonForm({ person, close, saved }: { person: Person | null; close: ()
   const [lastName, setLastName] = useState(person?.last_name || '')
   const [phone, setPhone] = useState(person?.phone || '')
   const [type, setType] = useState(person?.recipient_type || 'employee')
+  const [possibleMatches, setPossibleMatches] = useState<Person[]>([])
+  const [checkingMatches, setCheckingMatches] = useState(false)
+  const [matchCheckError, setMatchCheckError] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    const first = firstName.trim()
+    const last = lastName.trim()
+    const digits = phone.replace(/\D/g, '')
+    if (person || !first || !last || !digits) {
+      setPossibleMatches([])
+      setCheckingMatches(false)
+      setMatchCheckError(false)
+      return
+    }
+    let active = true
+    setCheckingMatches(true)
+    setMatchCheckError(false)
+    setPossibleMatches([])
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        duplicate_check: '1', first_name: first, last_name: last,
+        phone: phone.trim(), recipient_type: type,
+      })
+      api<Page<Person>>(`/people/?${params.toString()}`)
+        .then(result => {
+          if (!active) return
+          const normalizedFirst = first.toLocaleLowerCase()
+          const normalizedLast = last.toLocaleLowerCase()
+          setPossibleMatches(result.results.filter(existing => {
+            return existing.first_name.trim().toLocaleLowerCase() === normalizedFirst &&
+              existing.last_name.trim().toLocaleLowerCase() === normalizedLast &&
+              existing.phone.replace(/\D/g, '') === digits &&
+              existing.recipient_type === type
+          }))
+        })
+        .catch(() => { if (active) { setPossibleMatches([]); setMatchCheckError(true) } })
+        .finally(() => { if (active) setCheckingMatches(false) })
+    }, 300)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [firstName, lastName, phone, type, person])
   async function submit(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError('')
     try {
@@ -227,7 +266,11 @@ function PersonForm({ person, close, saved }: { person: Person | null; close: ()
     } catch (reason) { const message = errorMessage(reason instanceof Error ? reason.message : reason); setError(message); toast(message, 'error') } finally { setBusy(false) }
   }
   return <div className="overlay" role="presentation" onClick={event => { if (event.target === event.currentTarget) close() }}><div className="dialog" role="dialog" aria-modal="true" aria-label={person ? 'Edit person' : 'Add person'}><div className="dialog-head"><h2>{person ? 'Edit person' : 'Add person'}</h2><button onClick={close} aria-label="Close">×</button></div><form onSubmit={submit} className="form-stack">
-    {error && <Notice>{error}</Notice>}<div className="person-name-grid"><Field label="First name"><input required value={firstName} onChange={e => setFirstName(e.target.value)} /></Field><Field label="Last name"><input required value={lastName} onChange={e => setLastName(e.target.value)} /></Field></div><div className="person-contact-grid"><Field label="Phone number"><input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} /></Field><Field label="Recipient type"><select required value={type} onChange={e => setType(e.target.value)}>{['employee', 'student', 'guest'].map(value => <option key={value} value={value}>{value.charAt(0).toUpperCase() + value.slice(1)}</option>)}</select></Field></div><div className="form-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save person'}</button></div>
+    {error && <Notice>{error}</Notice>}<div className="person-name-grid"><Field label="First name"><input required value={firstName} onChange={e => setFirstName(e.target.value)} /></Field><Field label="Last name"><input required value={lastName} onChange={e => setLastName(e.target.value)} /></Field></div><div className="person-contact-grid"><Field label="Phone number"><input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} /></Field><Field label="Recipient type"><select required value={type} onChange={e => setType(e.target.value)}>{['employee', 'student', 'guest'].map(value => <option key={value} value={value}>{value.charAt(0).toUpperCase() + value.slice(1)}</option>)}</select></Field></div>
+    {checkingMatches && <p className="hint">Checking existing people…</p>}
+    {matchCheckError && <p className="hint">Could not check for existing people. You can still save.</p>}
+    {possibleMatches.length > 0 && <section className="duplicate-suggestions" aria-live="polite"><strong>Possible existing people</strong><p>All person details match this record.</p><ul>{possibleMatches.map(existing => <li key={existing.id}><span><strong>{existing.first_name} {existing.last_name}</strong><small>{existing.phone} · {existing.recipient_type}</small></span><small>Exact match</small></li>)}</ul></section>}
+    <div className="form-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save person'}</button></div>
   </form></div></div>
 }
 
@@ -284,6 +327,9 @@ function CheckoutForm({ close, saved }: { close: () => void; saved: () => void }
   const [newLastName, setNewLastName] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [newType, setNewType] = useState('employee')
+  const [recipientMatches, setRecipientMatches] = useState<Person[]>([])
+  const [checkingRecipientMatches, setCheckingRecipientMatches] = useState(false)
+  const [recipientMatchCheckError, setRecipientMatchCheckError] = useState(false)
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
   const [selectedAccessoryIds, setSelectedAccessoryIds] = useState<number[]>([])
   const [error, setError] = useState('')
@@ -305,6 +351,42 @@ function CheckoutForm({ close, saved }: { close: () => void; saved: () => void }
     }, 300)
     return () => { active = false; clearTimeout(timer) }
   }, [personSearch, mode, pickedPerson])
+  useEffect(() => {
+    const first = newFirstName.trim()
+    const last = newLastName.trim()
+    const digits = newPhone.replace(/\D/g, '')
+    if (mode !== 'new' || !first || !last || !digits) {
+      setRecipientMatches([])
+      setCheckingRecipientMatches(false)
+      setRecipientMatchCheckError(false)
+      return
+    }
+    let active = true
+    setCheckingRecipientMatches(true)
+    setRecipientMatchCheckError(false)
+    setRecipientMatches([])
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        duplicate_check: '1', first_name: first, last_name: last,
+        phone: newPhone.trim(), recipient_type: newType,
+      })
+      api<Page<Person>>(`/people/?${params.toString()}`)
+        .then(result => {
+          if (!active) return
+          const normalizedFirst = first.toLocaleLowerCase()
+          const normalizedLast = last.toLocaleLowerCase()
+          setRecipientMatches(result.results.filter(existing => {
+            return existing.first_name.trim().toLocaleLowerCase() === normalizedFirst &&
+              existing.last_name.trim().toLocaleLowerCase() === normalizedLast &&
+              existing.phone.replace(/\D/g, '') === digits &&
+              existing.recipient_type === newType
+          }))
+        })
+        .catch(() => { if (active) { setRecipientMatches([]); setRecipientMatchCheckError(true) } })
+        .finally(() => { if (active) setCheckingRecipientMatches(false) })
+    }, 300)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [newFirstName, newLastName, newPhone, newType, mode])
   useEffect(() => { allPages<Asset>('/assets/?status=available').then(setAssets).catch((reason: unknown) => setError(String(reason))) }, [])
   function switchMode(next: 'existing' | 'new') {
     if (next === 'new') {
@@ -344,7 +426,11 @@ function CheckoutForm({ close, saved }: { close: () => void; saved: () => void }
               {searching && <p className="hint">Searching people…</p>}
               {personSearch.trim().length >= 2 && !searching && people.length > 0 && <ul className="people-results" aria-label="Matching people">{people.map(person => <li key={person.id}><button type="button" onClick={() => { setPickedPerson(person); setRecipientId(person.id); setError('') }}><Check size={16} /><span><strong>{person.first_name}</strong><small>{person.last_name} · {person.phone}{person.recipient_type ? ` · ${person.recipient_type}` : ''}</small></span></button></li>)}</ul>}
               {personSearch.trim().length >= 2 && !searching && people.length === 0 && <div className="no-match"><span>No person matches “{personSearch.trim()}”.</span><button type="button" onClick={() => switchMode('new')}><UserPlus size={15} /> Register person</button></div>}
-            </div> : <div className="inline-register"><div className="register-grid"><Field label="First name *"><input required value={newFirstName} onChange={e => setNewFirstName(e.target.value)} /></Field><Field label="Last name *"><input required value={newLastName} onChange={e => setNewLastName(e.target.value)} /></Field><Field label="Phone *"><input required type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} /></Field><Field label="Recipient type"><select required value={newType} onChange={e => setNewType(e.target.value)}>{['employee', 'student', 'guest'].map(value => <option key={value} value={value}>{value.charAt(0).toUpperCase() + value.slice(1)}</option>)}</select></Field></div></div>}
+            </div> : <div className="inline-register"><div className="register-grid"><Field label="First name *"><input required value={newFirstName} onChange={e => setNewFirstName(e.target.value)} /></Field><Field label="Last name *"><input required value={newLastName} onChange={e => setNewLastName(e.target.value)} /></Field><Field label="Phone *"><input required type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} /></Field><Field label="Recipient type"><select required value={newType} onChange={e => setNewType(e.target.value)}>{['employee', 'student', 'guest'].map(value => <option key={value} value={value}>{value.charAt(0).toUpperCase() + value.slice(1)}</option>)}</select></Field></div>
+              {checkingRecipientMatches && <p className="hint">Checking existing people…</p>}
+              {recipientMatchCheckError && <p className="hint">Could not check for existing people. You can still save.</p>}
+              {recipientMatches.length > 0 && <section className="duplicate-suggestions" aria-live="polite"><strong>Possible existing people</strong><p>Select a person to use their saved details for this checkout.</p><ul>{recipientMatches.map(existing => <li key={existing.id}><button type="button" className="duplicate-suggestion" onClick={() => { setPickedPerson(existing); setRecipientId(existing.id); setPersonSearch(''); setMode('existing'); setRecipientMatches([]); setError('') }}><span><strong>{existing.first_name} {existing.last_name}</strong><small>{existing.phone} · {existing.recipient_type}</small></span><small>Exact match</small><b>Use this person</b></button></li>)}</ul></section>}
+            </div>}
           </>}
         </section>
         <p className="hint">{selectedAsset ? `Selected: ${selectedAsset.name}` : 'Select one available asset for this checkout.'}</p>

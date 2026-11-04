@@ -1,5 +1,7 @@
 """Authenticated office workflows for the single IT Store account."""
 
+import re
+
 from django.contrib.auth import authenticate
 from django.db import transaction
 from django.db.models import Prefetch, Q
@@ -154,6 +156,24 @@ class PeopleViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Recipient.objects.all()
+        if self.request.query_params.get("duplicate_check") == "1":
+            first_name = self.request.query_params.get("first_name", "").strip()
+            last_name = self.request.query_params.get("last_name", "").strip()
+            phone_digits = re.sub(r"\D", "", self.request.query_params.get("phone", ""))
+            recipient_type = self.request.query_params.get("recipient_type", "").strip()
+            if not first_name or not last_name or not phone_digits or not recipient_type:
+                return qs.none()
+            candidates = qs.filter(
+                first_name__iexact=first_name,
+                last_name__iexact=last_name,
+                recipient_type=recipient_type,
+            )
+            exact_phone_ids = [
+                person_id
+                for person_id, saved_phone in candidates.values_list("id", "phone")
+                if re.sub(r"\D", "", saved_phone) == phone_digits
+            ]
+            return qs.filter(pk__in=exact_phone_ids).order_by("first_name", "last_name", "id")
         q = self.request.query_params.get("q", "").strip()
         if q:
             name_query = Q()
