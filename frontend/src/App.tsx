@@ -66,13 +66,19 @@ function Badge({ value }: { value: string }) {
   return <span className={`badge badge-${value.replaceAll('_', '-')}`}>{statusLabel(value)}</span>
 }
 
-function Pager({ page, count, pageSize = 25, onChange }: { page: number; count: number; pageSize?: number; onChange: (page: number) => void }) {
+function Pager({ page, count, pageSize, onChange, onPageSizeChange }: { page: number; count: number; pageSize: number; onChange: (page: number) => void; onPageSizeChange: (size: number) => void }) {
   const pages = Math.max(1, Math.ceil(count / pageSize))
-  if (pages <= 1) return null
+  if (count === 0) return null
+  const first = (page - 1) * pageSize + 1
+  const last = Math.min(page * pageSize, count)
   return <div className="pager">
-    <button disabled={page <= 1} onClick={() => onChange(page - 1)}>Previous</button>
-    <span>Page {page} of {pages}</span>
-    <button disabled={page >= pages} onClick={() => onChange(page + 1)}>Next</button>
+    <span>Showing {first}–{last} of {count}</span>
+    <div className="pager-controls">
+      <label>Rows per page <select value={pageSize} onChange={event => onPageSizeChange(Number(event.target.value))}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option></select></label>
+      <button disabled={page <= 1} onClick={() => onChange(page - 1)}>Previous</button>
+      <span>Page {page} of {pages}</span>
+      <button disabled={page >= pages} onClick={() => onChange(page + 1)}>Next</button>
+    </div>
   </div>
 }
 
@@ -93,9 +99,10 @@ function Assets({ revision, reload }: { revision: number; reload: () => void }) 
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [editing, setEditing] = useState<Asset | 'new' | null>(null)
   const [managingAccessories, setManagingAccessories] = useState(false)
-  const path = `/assets/?page=${page}&q=${encodeURIComponent(q)}&status=${status}`
+  const path = `/assets/?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q)}&status=${status}`
   const { data, error, loading } = usePage<Asset>(path, revision)
   async function deleteAsset(asset: Asset) {
     if (!window.confirm(`Delete ${asset.name}? Assets with checkout history must be retired instead.`)) return
@@ -107,7 +114,7 @@ function Assets({ revision, reload }: { revision: number; reload: () => void }) 
     <div className="toolbar assets-toolbar"><div className="search"><Search size={18} /><input aria-label="Search assets" placeholder="Search by name" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /></div><select aria-label="Filter assets" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}><option value="">All statuses</option>{['available', 'checked_out', 'missing_accessories', 'needs_repair', 'lost', 'retired'].map(value => <option key={value} value={value}>{statusLabel(value)}</option>)}</select><button className="manage-accessories-button" onClick={() => setManagingAccessories(true)}>Manage accessories</button></div>
     {error && <Notice>{error}</Notice>}
     <div className="panel table-wrap"><table><thead><tr><th>Name</th><th>Included accessories</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.map(asset => <tr key={asset.id}><td className="strong">{asset.name}</td><td>{asset.accessory_items.length ? asset.accessory_items.map(item => item.name).join(', ') : '—'}</td><td><Badge value={asset.status} /></td><td className="row-actions"><button className="text-button" onClick={() => setEditing(asset)}>Edit</button><button className="text-button destructive" onClick={() => deleteAsset(asset)}><Trash2 size={14} /> Delete</button></td></tr>)}</tbody></table>{loading && <p className="empty">Loading assets…</p>}{!loading && !data?.results.length && <p className="empty">No assets found.</p>}</div>
-    <Pager page={page} count={data?.count || 0} onChange={setPage} />
+    <Pager page={page} count={data?.count || 0} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     {editing && <AssetForm asset={editing === 'new' ? null : editing} close={() => setEditing(null)} saved={() => { toast(editing === 'new' ? 'Asset added.' : 'Asset updated.'); setEditing(null); reload() }} />}
     {managingAccessories && <AccessoryManager close={() => setManagingAccessories(false)} saved={reload} />}
   </>
@@ -185,8 +192,9 @@ function People({ revision, reload }: { revision: number; reload: () => void }) 
   const toast = useToast()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [editing, setEditing] = useState<Person | 'new' | null>(null)
-  const { data, error, loading } = usePage<Person>(`/people/?page=${page}&q=${encodeURIComponent(q)}`, revision)
+  const { data, error, loading } = usePage<Person>(`/people/?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q)}`, revision)
   async function deletePerson(person: Person) {
     if (!window.confirm(`Delete ${person.first_name} ${person.last_name}? People with checkout history cannot be deleted.`)) return
     try { await api(`/people/${person.id}/`, { method: 'DELETE' }); toast('Person deleted.'); reload() }
@@ -196,7 +204,7 @@ function People({ revision, reload }: { revision: number; reload: () => void }) 
     <PageHeader title="People" description="Save recipient contact details for future checkouts." action={<button className="primary" onClick={() => setEditing('new')}><Plus size={17} /> Add person</button>} />
     <div className="toolbar"><div className="search"><Search size={18} /><input aria-label="Search people" placeholder="Search name or phone" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /></div></div>
     {error && <Notice>{error}</Notice>}
-    <div className="panel table-wrap"><table><thead><tr><th>First name</th><th>Last name</th><th>Phone</th><th>Recipient type</th><th></th></tr></thead><tbody>{data?.results.map(person => <tr key={person.id}><td className="strong">{person.first_name}</td><td>{person.last_name}</td><td>{person.phone}</td><td>{person.recipient_type || '—'}</td><td className="row-actions"><button className="text-button" onClick={() => setEditing(person)}>Edit</button><button className="text-button destructive" onClick={() => deletePerson(person)}><Trash2 size={14} /> Delete</button></td></tr>)}</tbody></table>{loading && <p className="empty">Loading people…</p>}{!loading && !data?.results.length && <p className="empty">No people found.</p>}</div><Pager page={page} count={data?.count || 0} onChange={setPage} />
+    <div className="panel table-wrap"><table><thead><tr><th>First name</th><th>Last name</th><th>Phone</th><th>Recipient type</th><th></th></tr></thead><tbody>{data?.results.map(person => <tr key={person.id}><td className="strong">{person.first_name}</td><td>{person.last_name}</td><td>{person.phone}</td><td>{person.recipient_type || '—'}</td><td className="row-actions"><button className="text-button" onClick={() => setEditing(person)}>Edit</button><button className="text-button destructive" onClick={() => deletePerson(person)}><Trash2 size={14} /> Delete</button></td></tr>)}</tbody></table>{loading && <p className="empty">Loading people…</p>}{!loading && !data?.results.length && <p className="empty">No people found.</p>}</div><Pager page={page} count={data?.count || 0} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     {editing && <PersonForm person={editing === 'new' ? null : editing} close={() => setEditing(null)} saved={() => { toast(editing === 'new' ? 'Person added.' : 'Person updated.'); setEditing(null); reload() }} />}
   </>
 }
@@ -228,12 +236,13 @@ function Checkouts({ revision, reload }: { revision: number; reload: () => void 
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [returningItem, setReturningItem] = useState<CheckoutItem | null>(null)
   const [returnedAccessoryIds, setReturnedAccessoryIds] = useState<number[]>([])
   const [returnBusy, setReturnBusy] = useState(false)
-  const { data, error, loading } = usePage<Checkout>(`/checkouts/?page=${page}&q=${encodeURIComponent(q)}&status=${status}`, revision)
+  const { data, error, loading } = usePage<Checkout>(`/checkouts/?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q)}&status=${status}`, revision)
   async function confirmReturn() {
     if (!returningItem) return
     setReturnBusy(true)
@@ -254,7 +263,7 @@ function Checkouts({ revision, reload }: { revision: number; reload: () => void 
     <PageHeader title="Checkouts" description="Track issued items and partial returns." action={<button className="primary" onClick={() => setCreating(true)}><Plus size={17} /> New checkout</button>} />
     <div className="toolbar"><div className="search"><Search size={18} /><input aria-label="Search checkouts" placeholder="Search recipient or phone" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /></div><select aria-label="Filter checkout items by status" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}><option value="">All item statuses</option><option value="checked_out">Checked out</option><option value="returned">Returned</option><option value="partially_returned">Partially returned</option><option value="returned_damaged">Returned damaged</option><option value="lost">Lost</option></select></div>
     {error && <Notice>{error}</Notice>}
-    <div className="panel table-wrap"><table><thead><tr><th>Checkout No</th><th>Full name</th><th>Phone number</th><th>Asset name</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.flatMap(checkout => checkout.items.map(item => <tr key={item.id} className="checkout-row" tabIndex={0} aria-label={`Open checkout #${checkout.id} details for ${item.asset_name}`} onClick={event => { if (event.target instanceof Element && event.target.closest('button')) return; setSelectedId(checkout.id) }} onKeyDown={event => { if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return; event.preventDefault(); setSelectedId(checkout.id) }}><td className="strong">#{checkout.id}</td><td>{checkout.recipient_first_name} {checkout.recipient_last_name}</td><td>{checkout.recipient_phone}</td><td>{item.asset_name}</td><td><Badge value={item.status} /></td><td className="row-actions">{item.status === 'checked_out' && <button className="text-button return-button" onClick={() => { setReturningItem(item); setReturnedAccessoryIds(item.accessory_snapshot.map(accessory => accessory.id)) }}>Mark returned</button>}<button className="text-button" onClick={() => setSelectedId(checkout.id)}>Open</button></td></tr>))}</tbody></table>{loading && <p className="empty">Loading checkouts…</p>}{!loading && !data?.results.length && <p className="empty">No checkouts found.</p>}</div><Pager page={page} count={data?.count || 0} onChange={setPage} />
+    <div className="panel table-wrap"><table><thead><tr><th>Checkout No</th><th>Full name</th><th>Phone number</th><th>Asset name</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.flatMap(checkout => checkout.items.map(item => <tr key={item.id} className="checkout-row" tabIndex={0} aria-label={`Open checkout #${checkout.id} details for ${item.asset_name}`} onClick={event => { if (event.target instanceof Element && event.target.closest('button')) return; setSelectedId(checkout.id) }} onKeyDown={event => { if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return; event.preventDefault(); setSelectedId(checkout.id) }}><td className="strong">#{checkout.id}</td><td>{checkout.recipient_first_name} {checkout.recipient_last_name}</td><td>{checkout.recipient_phone}</td><td>{item.asset_name}</td><td><Badge value={item.status} /></td><td className="row-actions">{item.status === 'checked_out' && <button className="text-button return-button" onClick={() => { setReturningItem(item); setReturnedAccessoryIds(item.accessory_snapshot.map(accessory => accessory.id)) }}>Mark returned</button>}<button className="text-button" onClick={() => setSelectedId(checkout.id)}>Open</button></td></tr>))}</tbody></table>{loading && <p className="empty">Loading checkouts…</p>}{!loading && !data?.results.length && <p className="empty">No checkouts found.</p>}</div><Pager page={page} count={data?.count || 0} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     {creating && <CheckoutForm close={() => setCreating(false)} saved={() => { toast('Checkout created.'); setCreating(false); reload() }} />}
     {selectedId && <CheckoutDetail id={selectedId} revision={revision} close={() => setSelectedId(null)} reload={reload} />}
     {returningItem && <div className="overlay" role="presentation" onClick={event => { if (event.target === event.currentTarget && !returnBusy) setReturningItem(null) }}><div className="dialog return-confirm-dialog" role="dialog" aria-modal="true" aria-label={`Confirm return for ${returningItem.asset_name}`}><div className="dialog-head"><h2>Confirm asset return</h2><button disabled={returnBusy} onClick={() => setReturningItem(null)} aria-label="Close">×</button></div><div className="form-stack"><p><strong>{returningItem.asset_name}</strong> is being returned. Confirm which listed accessories came back.</p>{returningItem.accessory_snapshot.length ? <fieldset className="accessory-field"><legend>Accessories received</legend><div className="accessory-options">{returningItem.accessory_snapshot.map(accessory => <label className="checkbox-line" key={accessory.id}><input type="checkbox" checked={returnedAccessoryIds.includes(accessory.id)} onChange={event => { const checked = event.currentTarget.checked; setReturnedAccessoryIds(current => checked ? [...current, accessory.id] : current.filter(id => id !== accessory.id)) }} />{accessory.name}</label>)}</div><p className="hint">Uncheck any missing accessory. The asset will remain unavailable until an Admin resolves it.</p></fieldset> : <p className="hint">No accessories were listed for this asset.</p>}<div className="form-actions"><button disabled={returnBusy} onClick={() => setReturningItem(null)}>Cancel</button><button className="primary" disabled={returnBusy} onClick={confirmReturn}>{returnBusy ? 'Saving…' : 'Confirm return'}</button></div></div></div></div>}

@@ -35,6 +35,12 @@ class LendingTests(APITestCase):
         duplicate = self.client.post("/api/v1/assets/", {"asset_id": " it-1 ", "name": "Another"})
         self.assertEqual(duplicate.status_code, 400)
 
+    def test_resource_lists_accept_a_custom_page_size(self):
+        response = self.client.get("/api/v1/assets/?page=1&page_size=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+
     def test_one_asset_per_checkout_and_no_double_loan(self):
         invalid_multi_asset = self.client.post(
             "/api/v1/checkouts/",

@@ -87,7 +87,11 @@ td small { display: block; color: var(--muted-foreground); margin-top: 3px; }
 .detail-actions { display: flex; align-items: center; gap: 10px; }
 .danger-outline { min-height: 34px; padding: 6px 10px; border: 1px solid #e6aaaa; border-radius: 8px; background: #fffafa; color: #a83232; font-size: .8rem; font-weight: 600; }
 .danger-outline:hover { background: #fff0ef; border-color: #d98c88; }
-.pager { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 18px; color: var(--muted-foreground); font-size: .85rem; }
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 18px; color: var(--muted-foreground); font-size: .85rem; }
+.pager-controls { display: flex; align-items: center; gap: 10px; }
+.pager-controls label { display: inline-flex; align-items: center; gap: 7px; }
+.pager-controls select { min-height: 36px; padding: 5px 28px 5px 9px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--brand-navy); background: white; }
+@media (max-width: 640px) { .pager { align-items: flex-start; flex-direction: column; } .pager-controls { width: 100%; flex-wrap: wrap; } }
 .overlay { position: fixed; inset: 0; background: #09203bbb; z-index: 20; display: flex; justify-content: center; align-items: flex-start; padding: 5vh 16px 20px; overflow-y: auto; }
 .dialog { width: min(100%, 520px); max-height: 90vh; overflow-y: auto; background: white; border-radius: 14px; box-shadow: 0 25px 70px #0003; padding: 25px; }
 .dialog.wide { width: min(100%, 770px); }
