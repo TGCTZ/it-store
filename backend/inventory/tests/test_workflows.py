@@ -2,7 +2,7 @@
 
 from rest_framework.test import APITestCase
 
-from inventory.models import Asset, Checkout, Recipient, User
+from inventory.models import AccessoryOption, Asset, Checkout, Recipient, User
 
 
 class LendingTests(APITestCase):
@@ -94,6 +94,29 @@ class LendingTests(APITestCase):
         self.assertNotIn("status", checkout_detail)
         self.assertEqual(checkout_detail["items"][0]["status"], "returned")
         self.assertEqual(self.checkout(first_item["asset"]).status_code, 201)
+
+    def test_active_checkout_can_change_asset_and_accessories(self):
+        power = AccessoryOption.objects.create(name="Test power cable")
+        remote = AccessoryOption.objects.create(name="Test remote control")
+        self.a.accessories.add(power)
+        self.b.accessories.add(remote)
+        created = self.checkout(self.a.pk)
+        checkout_id = created.data["id"]
+
+        updated = self.client.patch(
+            f"/api/v1/checkouts/{checkout_id}/",
+            {"asset_id": self.b.pk, "accessory_ids": [remote.pk]},
+            format="json",
+        )
+
+        self.assertEqual(updated.status_code, 200, updated.data)
+        self.assertEqual(Asset.objects.get(pk=self.a.pk).status, Asset.Status.AVAILABLE)
+        self.assertEqual(Asset.objects.get(pk=self.b.pk).status, Asset.Status.CHECKED_OUT)
+        self.assertEqual(updated.data["items"][0]["asset"], self.b.pk)
+        self.assertEqual(updated.data["items"][0]["accessory_snapshot"], [{"id": remote.pk, "name": "Test remote control"}])
+        self.assertTrue(Checkout.objects.get(pk=checkout_id).events.filter(kind="checkout_updated").exists())
+
+        self.assertEqual(self.checkout(self.b.pk).status_code, 400)
 
     def test_damaged_and_lost_items_need_superadmin_to_restore(self):
         created = [self.checkout(self.a.pk), self.checkout(self.b.pk)]

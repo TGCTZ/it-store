@@ -361,9 +361,75 @@ class CheckoutSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        if set(validated_data) - {"notes"}:
-            raise serializers.ValidationError("Only checkout notes may be changed.")
-        return super().update(instance, validated_data)
+        asset_id = validated_data.pop("asset_id", None)
+        accessory_ids = validated_data.pop("accessory_ids", None)
+        if validated_data:
+            raise serializers.ValidationError("Only the checked-out asset and its accessories may be changed.")
+
+        item = CheckoutItem.objects.select_for_update().select_related("asset").get(checkout=instance)
+        if item.status != CheckoutItem.Status.CHECKED_OUT:
+            raise serializers.ValidationError({"detail": "Only an active checkout can be edited."})
+
+        next_asset = item.asset
+        if asset_id is not None:
+            next_asset = Asset.objects.select_for_update().prefetch_related("accessories").filter(pk=asset_id).first()
+            if next_asset is None:
+                raise serializers.ValidationError({"asset_id": "This asset does not exist."})
+            if next_asset.pk != item.asset_id and next_asset.status != Asset.Status.AVAILABLE:
+                raise serializers.ValidationError({"asset_id": "This asset is not available."})
+        else:
+            next_asset = Asset.objects.select_for_update().prefetch_related("accessories").get(pk=item.asset_id)
+
+        configured = list(next_asset.accessories.all())
+        configured_ids = {option.pk for option in configured}
+        pending_items = next_asset.checkout_items.filter(
+            status__in=[CheckoutItem.Status.PARTIALLY_RETURNED, CheckoutItem.Status.RETURNED_DAMAGED]
+        )
+        missing_ids = {
+            accessory["id"]
+            for prior_item in pending_items
+            for accessory in prior_item.missing_accessories
+        }
+        selected_ids = set(accessory_ids) if accessory_ids is not None else (
+            {entry["id"] for entry in item.accessory_snapshot} if next_asset.pk == item.asset_id else configured_ids
+        )
+        if selected_ids - configured_ids:
+            raise serializers.ValidationError({"accessory_ids": f"An accessory is not assigned to {next_asset.name}."})
+        if selected_ids & missing_ids:
+            raise serializers.ValidationError({"accessory_ids": "Accessories still marked missing cannot be checked out."})
+
+        old_asset = item.asset
+        old_snapshot = item.accessory_snapshot
+        new_snapshot = [
+            {"id": option.id, "name": option.name}
+            for option in sorted((option for option in configured if option.pk in selected_ids), key=lambda option: (option.name.lower(), option.id))
+        ]
+        if next_asset.pk != old_asset.pk:
+            old_asset.status = Asset.Status.AVAILABLE
+            old_asset.save(update_fields=["status"])
+            next_asset.status = Asset.Status.CHECKED_OUT
+            next_asset.save(update_fields=["status"])
+            item.asset = next_asset
+            item.asset_label = next_asset.asset_id
+            item.asset_name = next_asset.name
+        item.accessory_snapshot = new_snapshot
+        item.save(update_fields=["asset", "asset_label", "asset_name", "accessory_snapshot"])
+
+        if next_asset.pk != old_asset.pk or new_snapshot != old_snapshot:
+            Event.objects.create(
+                actor=self.context["request"].user,
+                checkout=instance,
+                asset=next_asset,
+                kind="checkout_updated",
+                details={
+                    "previous_asset_name": old_asset.name,
+                    "asset_name": next_asset.name,
+                    "previous_accessories": old_snapshot,
+                    "accessories": new_snapshot,
+                },
+            )
+        instance._prefetched_objects_cache = {}
+        return instance
 
 
 class ResolveSerializer(serializers.Serializer):

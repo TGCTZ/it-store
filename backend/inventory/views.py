@@ -225,10 +225,10 @@ class CheckoutViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         if not kwargs.get("partial", False):
-            return Response({"detail": "Use PATCH to update checkout notes."}, status=405)
-        allowed = {"notes"}
+            return Response({"detail": "Use PATCH to update the checked-out asset or its accessories."}, status=405)
+        allowed = {"asset_id", "accessory_ids"}
         if set(request.data) - allowed:
-            raise ValidationError({"detail": "Only checkout notes may be changed."})
+            raise ValidationError({"detail": "Only the checked-out asset and its accessories may be changed."})
         return super().update(request, *args, **kwargs)
 
 
