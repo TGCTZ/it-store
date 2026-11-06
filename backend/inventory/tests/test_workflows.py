@@ -1,5 +1,8 @@
 """End-to-end API checks for the office lending rules."""
 
+from datetime import datetime, time, timedelta
+
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from inventory.models import AccessoryOption, Asset, Checkout, Recipient, User
@@ -64,6 +67,28 @@ class LendingTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(response.data["count"], 2)
         self.assertEqual(len(response.data["results"]), 1)
+
+    def test_checkout_list_can_be_filtered_by_inclusive_issued_date_range(self):
+        recent = self.checkout(self.a.pk)
+        older = self.checkout(self.b.pk)
+        today = timezone.localdate()
+        older_day = today - timedelta(days=3)
+        recent_time = timezone.make_aware(datetime.combine(today, time(12)), timezone.get_current_timezone())
+        older_time = timezone.make_aware(datetime.combine(older_day, time(12)), timezone.get_current_timezone())
+        Checkout.objects.filter(pk=recent.data["id"]).update(issued_at=recent_time)
+        Checkout.objects.filter(pk=older.data["id"]).update(issued_at=older_time)
+
+        response = self.client.get(
+            f"/api/v1/checkouts/?date_from={today.isoformat()}&date_to={today.isoformat()}"
+        )
+        invalid_range = self.client.get(
+            f"/api/v1/checkouts/?date_from={today.isoformat()}&date_to={older_day.isoformat()}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], recent.data["id"])
+        self.assertEqual(invalid_range.status_code, 400)
 
     def test_one_asset_per_checkout_and_no_double_loan(self):
         invalid_multi_asset = self.client.post(

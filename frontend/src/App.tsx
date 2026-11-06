@@ -90,6 +90,10 @@ function dateTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : '—'
 }
 
+function dateOnly(value: string | null) {
+  return value ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Dar_es_Salaam', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value)) : '—'
+}
+
 function PageHeader({ title, description, action, className = '' }: { title: string; description: string; action?: ReactNode; className?: string }) {
   return <div className={`page-header ${className}`}><div className="page-heading"><h1>{title}</h1><p>{description}</p></div>{action}</div>
 }
@@ -98,8 +102,6 @@ function Assets({ revision, reload }: { revision: number; reload: () => void }) 
   const toast = useToast()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [editing, setEditing] = useState<Asset | 'new' | null>(null)
@@ -280,6 +282,8 @@ function Checkouts({ revision, reload }: { revision: number; reload: () => void 
   const toast = useToast()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [creating, setCreating] = useState(false)
@@ -312,7 +316,7 @@ function Checkouts({ revision, reload }: { revision: number; reload: () => void 
     <PageHeader title="Checkouts" description="Track issued items and partial returns." action={<button className="primary" onClick={() => setCreating(true)}><Plus size={17} /> New checkout</button>} />
     <div className="toolbar checkout-toolbar"><div className="search"><Search size={18} /><input aria-label="Search checkouts" placeholder="Search recipient or phone" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} /></div><select aria-label="Filter checkout items by status" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}><option value="">All item statuses</option><option value="checked_out">Checked out</option><option value="returned">Returned</option><option value="partially_returned">Partially returned</option><option value="returned_damaged">Returned damaged</option><option value="lost">Lost</option></select><div className="date-range-filter"><label>From<input aria-label="Filter checkouts from date" type="date" value={dateFrom} max={dateTo || undefined} onChange={e => { setDateFrom(e.target.value); setPage(1) }} /></label><label>To<input aria-label="Filter checkouts to date" type="date" value={dateTo} min={dateFrom || undefined} onChange={e => { setDateTo(e.target.value); setPage(1) }} /></label></div></div>
     {error && <Notice>{error}</Notice>}
-    <div className="panel table-wrap"><table><thead><tr><th>Checkout No</th><th>Full name</th><th>Phone number</th><th>Asset name</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data?.results.flatMap(checkout => checkout.items.map(item => <tr key={item.id} className="checkout-row" tabIndex={0} aria-label={`Open checkout #${checkout.id} details for ${item.asset_name}`} onClick={event => { if (event.target instanceof Element && event.target.closest('button')) return; setSelectedId(checkout.id) }} onKeyDown={event => { if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return; event.preventDefault(); setSelectedId(checkout.id) }}><td className="strong">#{checkout.id}</td><td>{checkout.recipient_first_name} {checkout.recipient_last_name}</td><td>{checkout.recipient_phone}</td><td>{item.asset_name}</td><td><Badge value={item.status} /></td><td className="row-actions">{item.status === 'checked_out' && <><button className="text-button action-edit" onClick={() => setEditingCheckout({ checkoutId: checkout.id, item })}><Pencil size={14} /> Edit</button><button className="text-button action-return" onClick={() => { setReturningItem(item); setReturnedAccessoryIds(item.accessory_snapshot.map(accessory => accessory.id)) }}><Check size={14} /> Mark returned</button></>}<button className="text-button action-open" onClick={() => setSelectedId(checkout.id)}><Eye size={14} /> Open</button></td></tr>))}</tbody></table>{loading && <p className="empty">Loading checkouts…</p>}{!loading && !data?.results.length && <p className="empty">No checkouts found.</p>}</div><Pager page={page} count={data?.count || 0} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
+    <div className="panel table-wrap"><table><thead><tr><th className="checkout-serial">SN</th><th>Full name</th><th>Phone number</th><th>Asset name</th><th>Issued on</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data?.results.flatMap(checkout => checkout.items.map(item => <tr key={item.id} className="checkout-row" tabIndex={0} aria-label={`Open checkout #${checkout.id} details for ${item.asset_name}`} onClick={event => { if (event.target instanceof Element && event.target.closest('button')) return; setSelectedId(checkout.id) }} onKeyDown={event => { if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return; event.preventDefault(); setSelectedId(checkout.id) }}><td className="strong checkout-serial">#{checkout.id}</td><td>{checkout.recipient_first_name} {checkout.recipient_last_name}</td><td>{checkout.recipient_phone}</td><td>{item.asset_name}</td><td>{dateOnly(checkout.issued_at)}</td><td><Badge value={item.status} /></td><td className="row-actions">{item.status === 'checked_out' && <><button className="text-button action-edit" onClick={() => setEditingCheckout({ checkoutId: checkout.id, item })}><Pencil size={14} /> Edit</button><button className="text-button action-return" onClick={() => { setReturningItem(item); setReturnedAccessoryIds(item.accessory_snapshot.map(accessory => accessory.id)) }}><Check size={14} /> Mark returned</button></>}<button className="text-button action-open" onClick={() => setSelectedId(checkout.id)}><Eye size={14} /> Open</button></td></tr>))}</tbody></table>{loading && <p className="empty">Loading checkouts…</p>}{!loading && !data?.results.length && <p className="empty">No checkouts found.</p>}</div><Pager page={page} count={data?.count || 0} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     {creating && <CheckoutForm close={() => setCreating(false)} saved={() => { toast('Checkout created.'); setCreating(false); reload() }} />}
     {editingCheckout && <CheckoutEditForm checkoutId={editingCheckout.checkoutId} item={editingCheckout.item} close={() => setEditingCheckout(null)} saved={() => { setEditingCheckout(null); toast('Checkout updated.'); reload() }} />}
     {selectedId && <CheckoutDetail id={selectedId} revision={revision} close={() => setSelectedId(null)} reload={reload} />}
