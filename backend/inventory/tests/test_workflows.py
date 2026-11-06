@@ -35,10 +35,19 @@ class LendingTests(APITestCase):
         generated = self.client.post("/api/v1/assets/", {"name": "Probe"})
         self.assertEqual(generated.status_code, 201)
         self.assertEqual(generated.data["asset_id"], "TGC-IT-000001")
+        self.assertEqual(generated.data["name"], "PROBE")
         duplicate = self.client.post("/api/v1/assets/", {"asset_id": " it-1 ", "name": "Another"})
         self.assertEqual(duplicate.status_code, 400)
 
+    def test_asset_names_are_normalized_to_uppercase(self):
+        created = self.client.post("/api/v1/assets/", {"name": "new probe"}, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data["name"], "NEW PROBE")
+        self.assertEqual(Asset.objects.get(pk=created.data["id"]).name, "NEW PROBE")
+
     def test_duplicate_lookup_requires_every_person_field_to_match(self):
+        saved_person = Recipient.objects.get(pk=self.recipient.pk)
+        self.assertEqual((saved_person.first_name, saved_person.last_name), ("ASHA", "MASHAURI"))
         self.assertEqual(
             Recipient.objects.filter(
                 first_name__iexact="asha",
@@ -193,13 +202,13 @@ class LendingTests(APITestCase):
         self.assertEqual(edited.status_code, 200)
         item = self.client.get(f"/api/v1/checkouts/{created.data['id']}/").data["items"][0]
         self.assertEqual(item["asset_label"], "IT-1")
-        self.assertEqual(item["asset_name"], "Laptop")
+        self.assertEqual(item["asset_name"], "LAPTOP")
 
     def test_checkout_can_register_recipient_inline_atomically(self):
         payload = {
             "recipient_data": {
-                "first_name": "Juma",
-                "last_name": "Guest",
+                "first_name": "juma",
+                "last_name": "guest",
                 "phone": "+255700000002",
                 "recipient_type": "guest",
             },
@@ -207,8 +216,8 @@ class LendingTests(APITestCase):
         }
         created = self.client.post("/api/v1/checkouts/", payload, format="json")
         self.assertEqual(created.status_code, 201, created.data)
-        self.assertEqual(created.data["recipient_first_name"], "Juma")
-        self.assertEqual(created.data["recipient_last_name"], "Guest")
+        self.assertEqual(created.data["recipient_first_name"], "JUMA")
+        self.assertEqual(created.data["recipient_last_name"], "GUEST")
         self.assertEqual(Recipient.objects.count(), 2)
         self.assertEqual(
             Checkout.objects.get(pk=created.data["id"]).recipient.phone, "+255700000002"

@@ -60,8 +60,13 @@ class Recipient(models.Model):
     class Meta:
         ordering = ["first_name", "last_name", "id"]
 
+    def save(self, *args, **kwargs):
+        self.first_name = self.first_name.strip().upper()
+        self.last_name = self.last_name.strip().upper()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return self.first_name
+        return f"{self.first_name} {self.last_name}"
 
 
 class AssetSequence(models.Model):
@@ -114,7 +119,7 @@ class Asset(models.Model):
 
     def save(self, *args, **kwargs):
         self.asset_id = self.asset_id.strip().upper()
-        self.name = self.name.strip()
+        self.name = self.name.strip().upper()
         super().save(*args, **kwargs)
 
     def __str__(self):
