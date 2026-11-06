@@ -5,6 +5,7 @@ import re
 from django.contrib.auth import authenticate
 from django.db import transaction
 from django.db.models import Prefetch, Q
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.exceptions import ValidationError
@@ -221,6 +222,20 @@ class CheckoutViewSet(viewsets.ModelViewSet):
         item_status = self.request.query_params.get("status")
         if item_status in CheckoutItem.Status.values:
             qs = qs.filter(items__status=item_status).distinct()
+        date_from_value = self.request.query_params.get("date_from", "").strip()
+        date_to_value = self.request.query_params.get("date_to", "").strip()
+        date_from = parse_date(date_from_value) if date_from_value else None
+        date_to = parse_date(date_to_value) if date_to_value else None
+        if date_from_value and date_from is None:
+            raise ValidationError({"date_from": "Enter a valid start date in YYYY-MM-DD format."})
+        if date_to_value and date_to is None:
+            raise ValidationError({"date_to": "Enter a valid end date in YYYY-MM-DD format."})
+        if date_from and date_to and date_from > date_to:
+            raise ValidationError({"date_to": "The end date must be on or after the start date."})
+        if date_from:
+            qs = qs.filter(issued_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(issued_at__date__lte=date_to)
         return qs.distinct().order_by("-issued_at", "-pk")
 
     def update(self, request, *args, **kwargs):
