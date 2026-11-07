@@ -3,6 +3,7 @@
 The backend is a Django REST Framework API for the IT office equipment checkout workflow. PostgreSQL stores production data. Recipients are contacts; the system has one Superadmin login account.
 
 See the [project README](../README.md) for the full workflow and deployment status.
+See [API contract](../docs/api.md) for complete request examples and filter parameters, and [workflow rules](../docs/workflow.md) for status transitions.
 
 ## Set up locally
 
@@ -22,13 +23,13 @@ Drop and recreate an old development database before applying the consolidated i
 
 - `config/settings.py` loads environment settings and configures Django, REST Framework, CORS, and JWT authentication.
 - `inventory/models.py` defines the single login account, recipients, assets, shared accessory options, checkouts, individual checkout items, and change events.
-- `inventory/serializers.py` validates input and performs the atomic checkout and due-date workflows.
+- `inventory/serializers.py` validates input and performs atomic checkout and return workflows.
 - `inventory/views.py` protects administrative actions and handles returns and loss.
 - `inventory/tests/test_workflows.py` covers the main API rules.
 
-The database enforces one login account. Use a fresh development database with this clean initial migration set; then create the account once with `createsuperuser`. The migration seeds nine shared accessory options (power cables, common cables, chargers, remotes, cases, and batteries); the account can later rename, disable, or add options. Every asset has a unique name and a generated internal ID that the interface does not display. Each checkout is for exactly one asset; issuing another asset creates a separate checkout, including for the same person. Each `CheckoutItem` snapshots the asset name and only the accessories selected at issue time, so later edits do not rewrite history. The database allows only one item per checkout and prevents more than one open item for an asset.
+The database enforces one login account. Use a fresh development database with this clean initial migration set; then create the account once with `createsuperuser`. The initial migration seeds nine shared accessory options and three projector assets. The account can add or rename options and delete an option only after removing it from assets that use it. Every asset has a unique name and a generated internal ID that the interface does not display. Each checkout is for exactly one asset; issuing another asset creates a separate checkout, including for the same person. Each `CheckoutItem` snapshots the asset name and only the accessories selected at issue time, so later edits do not rewrite history. The database allows only one item per checkout and prevents more than one open item for an asset.
 
-Asset states are `available`, `checked_out`, `missing_accessories`, `needs_repair`, `lost`, and `retired`. Checkout-item states are `checked_out`, `returned`, `partially_returned`, `returned_damaged`, and `lost`. If accessories are missing when an asset is returned, its item becomes `partially_returned` while the physical asset becomes `available` for another checkout. The API exposes the outstanding accessory IDs; they cannot be selected for a new checkout until an Admin records them received. This preserves the missing-accessory history without blocking reuse of the asset. Damaged assets remain `needs_repair` after accessories are received. Events record checkout creation, item outcomes, accessory recovery, and asset status changes.
+Asset states are `available`, `checked_out`, `missing_accessories`, `needs_repair`, `lost`, and `retired`. Checkout-item states are `checked_out`, `returned`, `partially_returned`, `returned_damaged`, and `lost`. If accessories are missing when an asset is returned, its item becomes `partially_returned` while the physical asset becomes `available` for another checkout. The API exposes the outstanding accessory IDs; they cannot be selected for a new checkout until the Superadmin records them received. This preserves the missing-accessory history without blocking reuse of the asset. Damaged assets remain `needs_repair` after accessories are received. Events record checkout creation, item outcomes, accessory recovery, and asset status changes.
 
 ## API contract
 
@@ -43,8 +44,8 @@ All routes have the `/api/v1/` prefix. Login and token refresh are public; other
 | `GET/POST people/`, `GET/PATCH people/{id}/` | Reusable recipient contacts |
 | `GET/POST checkouts/`, `GET/PATCH checkouts/{id}/` | Create checkouts and edit an active checkout's asset or issued accessories |
 | `POST checkout-items/{id}/resolve/` | Record `returned`, `returned_damaged`, or `lost`, returned accessories, and optional notes. A returned item with missing accessories receives `partially_returned` status. |
-| `POST checkout-items/{id}/accessories-received/` | Admin records which previously missing accessories have now been received. |
-To create a checkout for someone already on file, send a recipient database ID and a nonempty list of asset database IDs:
+| `POST checkout-items/{id}/accessories-received/` | Superadmin records which previously missing accessories have now been received. |
+To create a checkout for someone already on file, send a recipient database ID, one asset database ID, and optional accessory IDs:
 
 ```json
 {"recipient": 4, "asset_id": 12, "accessory_ids": [3, 7]}
@@ -58,7 +59,7 @@ To register a recipient within the checkout, send `recipient_data` instead of `r
 
 The new contact and checkout are saved in one transaction; a failed checkout leaves no new recipient behind. Send exactly one of `recipient` and `recipient_data`.
 
-Optionally include `accessory_ids` to specify the configured accessories going out with the one selected asset. IDs must belong to that asset and cannot include accessories still marked missing on a prior return. When omitted, the API snapshots all configured accessories except those still missing. The API returns `400` if the asset does not exist, is unavailable, or the accessory selection is invalid. Search the three main lists with `?q=`; filter assets by asset status and checkouts by checkout-item status with `?status=`. A filtered checkout response includes only matching items while preserving each separate checkout record. Lists are paginated at 25 records per page. Use `PATCH` for changes; deletion is not exposed because it would damage lending history.
+Optionally include `accessory_ids` to specify the configured accessories going out with the one selected asset. IDs must belong to that asset and cannot include accessories still marked missing on a prior return. When omitted, the API snapshots all configured accessories except those still missing. The API returns `400` if the asset does not exist, is unavailable, or the accessory selection is invalid. Search assets, people, and checkouts with `?q=`; filter assets and checkout items with `?status=`; filter checkouts by issue date with `date_from` and `date_to` in `YYYY-MM-DD` format. A filtered checkout response includes only matching items while preserving each separate checkout record. The UI requests 10 records per page; API clients default to 25 and can request up to 100 with `page_size`. Use `PATCH` for changes. Deletion is blocked when it would remove checkout history or an accessory option assigned to an asset; checkout deletion is not exposed.
 
 ## Checks
 

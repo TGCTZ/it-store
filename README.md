@@ -2,7 +2,7 @@
 
 A small office-network app for lending individually identified IT devices and tools. Superadmins record checkouts and returns; people receiving equipment do not need accounts. The frontend uses the TGC logo and palette from the `service` project, and the backend follows its Django REST API and JWT sign-in approach. Domain-specific gem, billing, payment, and certificate code was not carried over.
 
-For component-specific setup and maintenance details, see the [backend README](backend/README.md) and [frontend README](frontend/README.md).
+Start with the [documentation index](docs/README.md), which links to the workflow/status rules, API contract, and local setup guide. For code-specific notes, see the [backend README](backend/README.md) and [frontend README](frontend/README.md).
 
 ## Windows PC setup
 
@@ -25,17 +25,17 @@ For an office-network deployment, configure a production WSGI server and static 
 ## Daily workflow
 
 1. The clean initial migration seeds `Projector 1`, `Projector 2`, and `Projector 3` as available assets. A Superadmin can add more physical assets with unique names; the app generates and keeps each internal ID out of the interface.
-2. Superadmins maintain a shared accessory checklist, seeded with power cables, chargers, common cables, remotes, cases, and batteries. When registering an asset, a Superadmin checks the accessories included with it; the same options can be used for any asset type.
+2. Superadmins maintain shared accessory options, seeded with power cables, chargers, common cables, remotes, cases, and batteries. When registering an asset, a Superadmin checks the accessories included with it; the same options can be used for any asset type. An option can be deleted only after removing it from all assets that use it.
 3. A Superadmin creates a checkout by finding an existing person or registering a new recipient in the same form. New contacts require a name and phone number and can be reused.
 4. The Superadmin selects one available asset per checkout. Its configured accessories appear as checkboxes; accessories staying in the office can be unchecked. Only checked accessories are recorded as going out and confirmed on return. To issue another asset, create a separate checkout, even for the same person.
-5. On return, a Superadmin confirms each asset’s listed accessories and records the outcome. Asset statuses are Available, Checked out, Missing accessories, Needs repair, Lost, or Retired. Each checkout item has its own status: Checked out, Returned, Partially returned, Returned damaged, or Lost. An item is Partially returned when the asset comes back but one or more accessories are missing. The physical asset is available for another checkout; missing accessories remain excluded from its next checkout until a Superadmin records them received. Damage keeps an asset unavailable until resolved; lost assets also remain unavailable until restored. Each issuance remains a separate checkout record, including repeat checkouts by the same person.
+5. On return, a Superadmin confirms the asset’s listed accessories and records the outcome. Asset statuses are Available, Checked out, Missing accessories, Needs repair, Lost, or Retired. Checkout item statuses are Checked out, Returned, Partially returned, Returned damaged, or Lost. An item is Partially returned when the asset comes back but one or more accessories are missing. The physical asset becomes available for another checkout; missing accessories stay excluded until a Superadmin records them received. A damaged asset remains in Needs repair; a lost asset remains Lost until its status is resolved. Each issuance remains a separate checkout record, including repeat checkouts by the same person.
 The system has one Superadmin login. Account creation and management are not available in the app, API, or Django admin; initialize the account with `createsuperuser`. The Superadmin can change their own password. Asset names are unique; the internal asset ID is generated automatically and is not shown in the interface. All API endpoints require authentication except login and token refresh. Recipients do not sign in; there are no automatic messages, receipts, signatures, or import process.
 
 ## API
 
 The API is under `/api/v1/`. Main resources are `assets/`, `accessories/`, `people/`, and `checkouts/`. Each checkout uses one `asset_id` plus optional `accessory_ids`, and uses `recipient` or `recipient_data`. The Superadmin uses `checkout-items/{id}/resolve/` to record an item outcome and `checkout-items/{id}/accessories-received/` to record accessories returned later.
 
-Search assets, people, and checkouts with `?q=`. Filter assets by asset status and checkouts by item status using `?status=`. When an item status is selected, checkout responses include only matching items while retaining each checkout’s separate issue record. List responses use 25-item pages. Checkout history records the issuing Superadmin, recipient details, asset names and accessories as they were at issue time, item outcomes, and any accessories reported missing.
+Search assets, people, and checkouts with `?q=`. Filter assets by asset status and checkouts by item status using `?status=`. Checkouts also accept `date_from` and `date_to` in `YYYY-MM-DD` format. When an item status is selected, checkout responses include only matching items while retaining each checkout’s separate issue record. The app requests 10 rows per page; API clients default to 25 and may request up to 100 with `page_size`. Checkout history records the issuing Superadmin, recipient details, asset names and accessories as they were at issue time, item outcomes, and any accessories reported missing.
 
 ## Verification
 
