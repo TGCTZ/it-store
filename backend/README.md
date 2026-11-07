@@ -39,15 +39,15 @@ All routes have the `/api/v1/` prefix. Login and token refresh are public; other
 | `POST auth/login/`, `POST auth/refresh/`, `POST auth/logout/` | Superadmin JWT session |
 | `GET auth/me/`, `POST auth/password/` | Current account and password change |
 | `GET/POST assets/`, `GET/PATCH assets/{id}/` | Search assets; Superadmins can create or edit |
-| `GET/POST accessories/`, `GET/PATCH accessories/{id}/` | Shared checkbox options; Superadmins can add, rename, or disable |
+| `GET/POST accessories/`, `GET/PATCH accessories/{id}/` | Shared checkbox options; Superadmins can add, rename, or delete |
 | `GET/POST people/`, `GET/PATCH people/{id}/` | Reusable recipient contacts |
-| `GET/POST checkouts/`, `GET/PATCH checkouts/{id}/` | Create checkouts and update notes |
+| `GET/POST checkouts/`, `GET/PATCH checkouts/{id}/` | Create checkouts and edit an active checkout's asset or issued accessories |
 | `POST checkout-items/{id}/resolve/` | Record `returned`, `returned_damaged`, or `lost`, returned accessories, and optional notes. A returned item with missing accessories receives `partially_returned` status. |
 | `POST checkout-items/{id}/accessories-received/` | Admin records which previously missing accessories have now been received. |
 To create a checkout for someone already on file, send a recipient database ID and a nonempty list of asset database IDs:
 
 ```json
-{"recipient": 4, "asset_id": 12, "accessory_ids": [3, 7], "notes": "For workshop"}
+{"recipient": 4, "asset_id": 12, "accessory_ids": [3, 7]}
 ```
 
 To register a recipient within the checkout, send `recipient_data` instead of `recipient`:

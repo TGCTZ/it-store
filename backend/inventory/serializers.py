@@ -93,7 +93,6 @@ class AssetSerializer(serializers.ModelSerializer):
             "id",
             "asset_id",
             "name",
-            "notes",
             "accessory_ids",
             "accessory_items",
             "missing_accessory_ids",
@@ -246,7 +245,6 @@ class CheckoutSerializer(serializers.ModelSerializer):
             "events",
             "issued_at",
             "issued_by_name",
-            "notes",
         )
         read_only_fields = (
             "id",

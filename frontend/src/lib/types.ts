@@ -22,7 +22,6 @@ export interface Asset {
   id: number
   asset_id: string
   name: string
-  notes: string
   accessory_ids: number[]
   accessory_items: AccessoryOption[]
   missing_accessory_ids: number[]
@@ -68,7 +67,6 @@ export interface Checkout {
   events: Event[]
   issued_at: string
   issued_by_name: string
-  notes: string
 }
 
 export interface Page<T> {

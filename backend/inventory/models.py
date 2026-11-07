@@ -104,9 +104,6 @@ class Asset(models.Model):
 
     asset_id = models.CharField(max_length=80, unique=True)
     name = models.CharField(max_length=160)
-    category = models.CharField(max_length=100, blank=True)
-    serial_number = models.CharField(max_length=120, blank=True)
-    notes = models.TextField(blank=True)
     accessories = models.ManyToManyField(AccessoryOption, related_name="assets", blank=True)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.AVAILABLE)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -135,7 +132,6 @@ class Checkout(models.Model):
     recipient_phone = models.CharField(max_length=40)
     issued_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="issued_checkouts")
     issued_at = models.DateTimeField(default=timezone.now)
-    notes = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-issued_at", "-id"]
