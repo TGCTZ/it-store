@@ -305,7 +305,7 @@ function PersonForm({ person, close, saved }: { person: Person | null; close: ()
 function Checkouts({ revision, reload }: { revision: number; reload: () => void }) {
   const toast = useToast()
   const [q, setQ] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState('checked_out')
   const [dateFrom, setDateFrom] = useState(() => firstDayOfMonthInput())
   const [dateTo, setDateTo] = useState(() => todayDateInput())
   const [page, setPage] = useState(1)
