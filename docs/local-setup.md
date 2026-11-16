@@ -8,6 +8,8 @@ The app opens at `http://127.0.0.1:333`; the API listens on `127.0.0.1:334`. Pos
 
 To restart the local servers, double-click `Restart IT Store.bat`. To remove automatic startup, run `scripts/Uninstall-AutoStart.ps1`.
 
+If an existing development database returns a 500 on checkout creation because of the old `notes` column, double-click `Fix IT Store Database.bat` from the project folder and type `FIX` when prompted. It uses the database configured in `backend/.env`, verifies that it is PostgreSQL database `itstore`, and removes only the obsolete asset and checkout columns. Existing asset and checkout rows are kept; values in those removed columns are discarded. Restart IT Store afterward.
+
 ## Manual development
 
 Configure `backend/.env` using `backend/.env.example`. Set a database URL, a strong secret key, allowed hosts, and CORS origins. PostgreSQL is the intended database. From the project root:
