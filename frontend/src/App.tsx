@@ -140,7 +140,7 @@ function Assets({ revision, reload }: { revision: number; reload: () => void }) 
     <PageHeader className="assets-page-header" title="Assets" description="Each device or tool has a unique name and a record of its included accessories." action={<button className="primary" onClick={() => setEditing('new')}><Plus size={17} /> Add asset</button>} />
     <div className="toolbar assets-toolbar"><div className="search"><Search size={18} /><input aria-label="Search assets" placeholder="Search by name" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} />{q && <button type="button" className="search-clear" aria-label="Clear asset search" title="Clear search" onClick={() => { setQ(''); setPage(1) }}><X size={16} /></button>}</div><select aria-label="Filter assets" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}><option value="">All statuses</option>{['available', 'checked_out', 'missing_accessories', 'needs_repair', 'lost', 'retired'].map(value => <option key={value} value={value}>{statusLabel(value)}</option>)}</select></div>
     {error && <Notice>{error}</Notice>}
-    <div className="panel table-wrap"><table><thead><tr><th>Name</th><th>Included accessories</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.map(asset => <tr key={asset.id}><td className="strong">{assetName(asset.name)}</td><td>{asset.accessory_items.length ? asset.accessory_items.map(item => item.name).join(', ') : '—'}</td><td><Badge value={asset.status} /></td><td className="row-actions"><button className="text-button" onClick={() => setEditing(asset)}>Edit</button><button className="text-button destructive" onClick={() => deleteAsset(asset)}><Trash2 size={14} /> Delete</button></td></tr>)}</tbody></table>{loading && <p className="empty">Loading assets…</p>}{!loading && !data?.results.length && <p className="empty">No assets found.</p>}</div>
+    <div className="panel table-wrap"><table><thead><tr><th className="table-serial">SN</th><th>Name</th><th>Included accessories</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.map((asset, index) => <tr key={asset.id}><td className="table-serial">{(page - 1) * pageSize + index + 1}</td><td className="strong">{assetName(asset.name)}</td><td>{asset.accessory_items.length ? asset.accessory_items.map(item => item.name).join(', ') : '—'}</td><td><Badge value={asset.status} /></td><td className="row-actions"><button className="text-button" onClick={() => setEditing(asset)}>Edit</button><button className="text-button destructive" onClick={() => deleteAsset(asset)}><Trash2 size={14} /> Delete</button></td></tr>)}</tbody></table>{loading && <p className="empty">Loading assets…</p>}{!loading && !data?.results.length && <p className="empty">No assets found.</p>}</div>
     <Pager page={page} count={data?.count || 0} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     {editing && <AssetForm asset={editing === 'new' ? null : editing} close={() => setEditing(null)} saved={() => { toast(editing === 'new' ? 'Asset added.' : 'Asset updated.'); setEditing(null); reload() }} />}
   </>
@@ -178,6 +178,8 @@ function Accessories({ saved }: { saved: () => void }) {
   const toast = useToast()
   const [options, setOptions] = useState<AccessoryOption[]>([])
   const [q, setQ] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -203,27 +205,34 @@ function Accessories({ saved }: { saved: () => void }) {
     catch (reason) { const message = errorMessage(reason instanceof Error ? reason.message : reason); setError(message); toast(message, 'error') }
   }
   const filteredOptions = options.filter(option => option.name.toLocaleLowerCase().includes(q.trim().toLocaleLowerCase()))
+  const firstIndex = (page - 1) * pageSize
+  const pagedOptions = filteredOptions.slice(firstIndex, firstIndex + pageSize)
+  useEffect(() => {
+    const lastPage = Math.max(1, Math.ceil(filteredOptions.length / pageSize))
+    if (page > lastPage) setPage(lastPage)
+  }, [filteredOptions.length, page, pageSize])
   return <>
     <PageHeader title="Accessories" description="Manage shared accessory options available to assign to assets." action={<button className="primary" onClick={() => { setName(''); setError(''); setAdding(true) }}><Plus size={17} /> Add accessory</button>} />
     {!adding && error && <Notice>{error}</Notice>}
     <div className="panel accessory-management-page">
-      <div className="search"><Search size={18} /><input aria-label="Search accessories" placeholder="Search by name" value={q} onChange={e => setQ(e.target.value)} />{q && <button type="button" className="search-clear" aria-label="Clear accessory search" title="Clear search" onClick={() => setQ('')}><X size={16} /></button>}</div>
-      {filteredOptions.length > 0 && <div className="table-wrap"><table><thead><tr><th>Accessory</th><th>Actions</th></tr></thead><tbody>{filteredOptions.map(option => <AccessoryOptionRow key={option.id} option={option} save={updateOption} remove={deleteOption} />)}</tbody></table></div>}
+      <div className="search"><Search size={18} /><input aria-label="Search accessories" placeholder="Search by name" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} />{q && <button type="button" className="search-clear" aria-label="Clear accessory search" title="Clear search" onClick={() => { setQ(''); setPage(1) }}><X size={16} /></button>}</div>
+      {pagedOptions.length > 0 && <div className="table-wrap"><table><thead><tr><th className="table-serial">SN</th><th>Accessory</th><th>Actions</th></tr></thead><tbody>{pagedOptions.map((option, index) => <AccessoryOptionRow key={option.id} serialNumber={firstIndex + index + 1} option={option} save={updateOption} remove={deleteOption} />)}</tbody></table></div>}
       {options.length > 0 && !filteredOptions.length && <p className="empty">No accessories match “{q.trim()}”.</p>}
       {!options.length && !error && <p className="empty">No accessory options found.</p>}
+      <Pager page={page} count={filteredOptions.length} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     </div>
     {adding && <div className="overlay" role="presentation" onClick={event => { if (event.target === event.currentTarget && !busy) setAdding(false) }}><div className="dialog" role="dialog" aria-modal="true" aria-label="Add accessory"><div className="dialog-head"><h2>Add accessory</h2><button type="button" disabled={busy} onClick={() => setAdding(false)} aria-label="Close">×</button></div><form className="form-stack" onSubmit={createOption}>{error && <Notice>{error}</Notice>}<Field label="Accessory name"><input required autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="For example, Power cable" /></Field><div className="form-actions"><button type="button" disabled={busy} onClick={() => setAdding(false)}>Cancel</button><button className="primary" disabled={busy || !name.trim()}><Plus size={16} /> {busy ? 'Adding…' : 'Add accessory'}</button></div></form></div></div>}
   </>
 }
 
-function AccessoryOptionRow({ option, save, remove }: { option: AccessoryOption; save: (option: AccessoryOption, name: string) => Promise<boolean>; remove: (option: AccessoryOption) => Promise<void> }) {
+function AccessoryOptionRow({ serialNumber, option, save, remove }: { serialNumber: number; option: AccessoryOption; save: (option: AccessoryOption, name: string) => Promise<boolean>; remove: (option: AccessoryOption) => Promise<void> }) {
   const [name, setName] = useState(option.name)
   const [editing, setEditing] = useState(false)
   const hasNameChange = name.trim() !== option.name
   async function submitSave() {
     if (hasNameChange && name.trim() && await save(option, name.trim())) setEditing(false)
   }
-  return <tr><td>{editing ? <input aria-label={`Accessory name ${option.name}`} autoFocus value={name} onChange={e => setName(e.target.value)} /> : option.name}</td><td className="row-actions">{editing ? <><button type="button" className="text-button action-edit" disabled={!hasNameChange || !name.trim()} onClick={submitSave}>Save</button><button type="button" className="text-button" onClick={() => { setName(option.name); setEditing(false) }}>Cancel</button></> : <button type="button" className="text-button" onClick={() => setEditing(true)}>Edit</button>}<button type="button" className="text-button destructive" onClick={() => remove(option)}><Trash2 size={14} /> Delete</button></td></tr>
+  return <tr><td className="table-serial">{serialNumber}</td><td>{editing ? <input aria-label={`Accessory name ${option.name}`} autoFocus value={name} onChange={e => setName(e.target.value)} /> : option.name}</td><td className="row-actions">{editing ? <><button type="button" className="text-button action-edit" disabled={!hasNameChange || !name.trim()} onClick={submitSave}>Save</button><button type="button" className="text-button" onClick={() => { setName(option.name); setEditing(false) }}>Cancel</button></> : <button type="button" className="text-button" onClick={() => setEditing(true)}>Edit</button>}<button type="button" className="text-button destructive" onClick={() => remove(option)}><Trash2 size={14} /> Delete</button></td></tr>
 }
 
 function People({ revision, reload }: { revision: number; reload: () => void }) {
