@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Boxes, Check, ClipboardList, Eye, LogOut, Pencil, Plus, Search, Settings, Trash2, UserPlus, Users, X } from 'lucide-react'
+import { Boxes, Cable, Check, ClipboardList, Eye, LogOut, Pencil, Plus, Search, Settings, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { api, errorMessage, hasSession, login, logout } from './lib/api'
 import type { AccessoryOption, Asset, AssetStatus, Checkout, CheckoutItem, Page, Person, User } from './lib/types'
 import logo from './assets/tgc-logo.webp'
 
-type Section = 'assets' | 'people' | 'checkouts'
+type Section = 'assets' | 'accessories' | 'people' | 'checkouts'
 
 function usePage<T>(path: string, revision: number) {
   const [data, setData] = useState<Page<T> | null>(null)
@@ -129,7 +129,6 @@ function Assets({ revision, reload }: { revision: number; reload: () => void }) 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [editing, setEditing] = useState<Asset | 'new' | null>(null)
-  const [managingAccessories, setManagingAccessories] = useState(false)
   const path = `/assets/?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q)}&status=${status}`
   const { data, error, loading } = usePage<Asset>(path, revision)
   async function deleteAsset(asset: Asset) {
@@ -139,12 +138,11 @@ function Assets({ revision, reload }: { revision: number; reload: () => void }) 
   }
   return <>
     <PageHeader className="assets-page-header" title="Assets" description="Each device or tool has a unique name and a record of its included accessories." action={<button className="primary" onClick={() => setEditing('new')}><Plus size={17} /> Add asset</button>} />
-    <div className="toolbar assets-toolbar"><div className="search"><Search size={18} /><input aria-label="Search assets" placeholder="Search by name" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} />{q && <button type="button" className="search-clear" aria-label="Clear asset search" title="Clear search" onClick={() => { setQ(''); setPage(1) }}><X size={16} /></button>}</div><select aria-label="Filter assets" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}><option value="">All statuses</option>{['available', 'checked_out', 'missing_accessories', 'needs_repair', 'lost', 'retired'].map(value => <option key={value} value={value}>{statusLabel(value)}</option>)}</select><button className="manage-accessories-button" onClick={() => setManagingAccessories(true)}>Manage accessories</button></div>
+    <div className="toolbar assets-toolbar"><div className="search"><Search size={18} /><input aria-label="Search assets" placeholder="Search by name" value={q} onChange={e => { setQ(e.target.value); setPage(1) }} />{q && <button type="button" className="search-clear" aria-label="Clear asset search" title="Clear search" onClick={() => { setQ(''); setPage(1) }}><X size={16} /></button>}</div><select aria-label="Filter assets" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}><option value="">All statuses</option>{['available', 'checked_out', 'missing_accessories', 'needs_repair', 'lost', 'retired'].map(value => <option key={value} value={value}>{statusLabel(value)}</option>)}</select></div>
     {error && <Notice>{error}</Notice>}
     <div className="panel table-wrap"><table><thead><tr><th>Name</th><th>Included accessories</th><th>Status</th><th></th></tr></thead><tbody>{data?.results.map(asset => <tr key={asset.id}><td className="strong">{assetName(asset.name)}</td><td>{asset.accessory_items.length ? asset.accessory_items.map(item => item.name).join(', ') : '—'}</td><td><Badge value={asset.status} /></td><td className="row-actions"><button className="text-button" onClick={() => setEditing(asset)}>Edit</button><button className="text-button destructive" onClick={() => deleteAsset(asset)}><Trash2 size={14} /> Delete</button></td></tr>)}</tbody></table>{loading && <p className="empty">Loading assets…</p>}{!loading && !data?.results.length && <p className="empty">No assets found.</p>}</div>
     <Pager page={page} count={data?.count || 0} pageSize={pageSize} onChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1) }} />
     {editing && <AssetForm asset={editing === 'new' ? null : editing} close={() => setEditing(null)} saved={() => { toast(editing === 'new' ? 'Asset added.' : 'Asset updated.'); setEditing(null); reload() }} />}
-    {managingAccessories && <AccessoryManager close={() => setManagingAccessories(false)} saved={reload} />}
   </>
 }
 
@@ -170,13 +168,13 @@ function AssetForm({ asset, close, saved }: { asset: Asset | null; close: () => 
   return <div className="overlay" role="presentation" onClick={event => { if (event.target === event.currentTarget) close() }}><div className="dialog" role="dialog" aria-modal="true" aria-label={asset ? 'Edit asset' : 'Add asset'}><div className="dialog-head"><h2>{asset ? 'Edit asset' : 'Add asset'}</h2><button onClick={close} aria-label="Close">×</button></div><form onSubmit={submit} className="form-stack">
     {error && <Notice>{error}</Notice>}
     <Field label="Name *"><input required autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="For example, Projector 1" /></Field>
-    <fieldset className="accessory-field"><legend>Included accessories</legend>{accessories.length ? <div className="accessory-options">{accessories.map(option => <label className="checkbox-line" key={option.id}><input type="checkbox" checked={accessoryIds.includes(option.id)} onChange={event => { const checked = event.currentTarget.checked; setAccessoryIds(current => checked ? [...current, option.id] : current.filter(id => id !== option.id)) }} />{option.name}</label>)}</div> : <p className="hint">No accessory options yet. Add them from Manage accessories.</p>}</fieldset>
+    <fieldset className="accessory-field"><legend>Included accessories</legend>{accessories.length ? <div className="accessory-options">{accessories.map(option => <label className="checkbox-line" key={option.id}><input type="checkbox" checked={accessoryIds.includes(option.id)} onChange={event => { const checked = event.currentTarget.checked; setAccessoryIds(current => checked ? [...current, option.id] : current.filter(id => id !== option.id)) }} />{option.name}</label>)}</div> : <p className="hint">No accessory options yet. Add them from Accessories.</p>}</fieldset>
     {asset && <Field label="Status"><select value={status} disabled={asset.status === 'checked_out'} onChange={e => setStatus(e.target.value as AssetStatus)}>{['available', 'missing_accessories', 'needs_repair', 'lost', 'retired'].map(value => <option key={value} value={value}>{statusLabel(value)}</option>)}</select></Field>}
     <div className="form-actions"><button type="button" onClick={close}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save asset'}</button></div>
   </form></div></div>
 }
 
-function AccessoryManager({ close, saved }: { close: () => void; saved: () => void }) {
+function Accessories({ saved }: { saved: () => void }) {
   const toast = useToast()
   const [options, setOptions] = useState<AccessoryOption[]>([])
   const [name, setName] = useState('')
@@ -202,12 +200,15 @@ function AccessoryManager({ close, saved }: { close: () => void; saved: () => vo
     try { await api(`/accessories/${option.id}/`, { method: 'DELETE' }); await reloadOptions(); toast('Accessory option deleted.'); saved() }
     catch (reason) { const message = errorMessage(reason instanceof Error ? reason.message : reason); setError(message); toast(message, 'error') }
   }
-  return <div className="overlay" role="presentation" onClick={event => { if (event.target === event.currentTarget) close() }}><div className="dialog wide" role="dialog" aria-modal="true" aria-label="Manage accessories"><div className="dialog-head"><h2>Manage accessories</h2><button onClick={close} aria-label="Close">×</button></div><div className="form-stack">
+  return <>
+    <PageHeader title="Accessories" description="Manage shared accessory options available to assign to assets." />
     {error && <Notice>{error}</Notice>}
-    <form className="accessory-create" onSubmit={createOption}><Field label="New accessory option"><input required value={name} onChange={e => setName(e.target.value)} placeholder="For example, Power cable" /></Field><button className="primary" disabled={busy}><Plus size={16} /> Add option</button></form>
-    <div className="accessory-option-list">{options.map(option => <AccessoryOptionRow key={option.id} option={option} save={updateOption} remove={deleteOption} />)}</div>
-    <div className="form-actions"><button onClick={close}>Done</button></div>
-  </div></div></div>
+    <div className="panel accessory-management-page">
+      <form className="accessory-create" onSubmit={createOption}><Field label="New accessory option"><input required value={name} onChange={e => setName(e.target.value)} placeholder="For example, Power cable" /></Field><button className="primary" disabled={busy}><Plus size={16} /> Add option</button></form>
+      <div className="accessory-option-list">{options.map(option => <AccessoryOptionRow key={option.id} option={option} save={updateOption} remove={deleteOption} />)}</div>
+      {!options.length && !error && <p className="empty">No accessory options found.</p>}
+    </div>
+  </>
 }
 
 function AccessoryOptionRow({ option, save, remove }: { option: AccessoryOption; save: (option: AccessoryOption, name: string) => Promise<void>; remove: (option: AccessoryOption) => Promise<void> }) {
@@ -604,10 +605,5 @@ export default function App() {
   async function signOut() { try { await logout() } finally { setUser(null) } }
   if (loading) return <div className="loading-screen">Loading IT Store…</div>
   if (!user) return <SignIn signedIn={nextUser => { setSection('checkouts'); setUser(nextUser) }} />
-  const nav: { key: Section; label: string; icon: typeof Boxes }[] = [
-    { key: 'checkouts', label: 'Checkouts', icon: ClipboardList },
-    { key: 'assets', label: 'Assets', icon: Boxes },
-    { key: 'people', label: 'People', icon: Users },
-  ]
-  return <ToastProvider><div className="app-shell"><aside className="sidebar"><div className="sidebar-brand"><img src={logo} alt="IT Store" /><div><strong>IT<br />STORE</strong></div></div><nav aria-label="Main navigation"><button className={`main-nav-link ${section === 'checkouts' ? 'active' : ''}`} onClick={() => setSection('checkouts')}><ClipboardList size={18} />Checkouts</button><div className="nav-separator" /><div className="nav-caption">Ref Data</div>{nav.filter(item => item.key !== 'checkouts').map(item => <button key={item.key} className={section === item.key ? 'active' : ''} onClick={() => setSection(item.key)}><item.icon size={18} />{item.label}</button>)}</nav><div className="sidebar-profile"><div className="profile-initials">{user.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</div><div className="profile-details"><strong>{user.name}</strong><small>{user.email}</small></div><button className="profile-settings" onClick={() => setChangingPassword(true)} title="Change password" aria-label="Change password"><Settings size={17} /></button><span className="profile-role">Superadmin</span><button className="profile-signout" onClick={signOut} title="Sign out"><LogOut size={14} /> Sign out</button></div></aside><div className="workspace"><main>{section === 'assets' && <Assets revision={revision} reload={reload} />}{section === 'people' && <People revision={revision} reload={reload} />}{section === 'checkouts' && <Checkouts revision={revision} reload={reload} />}</main></div>{changingPassword && <PasswordDialog close={() => setChangingPassword(false)} />}</div></ToastProvider>
+  return <ToastProvider><div className="app-shell"><aside className="sidebar"><div className="sidebar-brand"><img src={logo} alt="IT Store" /><div><strong>IT<br />STORE</strong></div></div><nav aria-label="Main navigation"><button className={`main-nav-link ${section === 'checkouts' ? 'active' : ''}`} onClick={() => setSection('checkouts')}><ClipboardList size={18} />Checkouts</button><div className="nav-separator" /><div className="nav-caption">Ref Data</div><button className={section === 'assets' ? 'active' : ''} onClick={() => setSection('assets')}><Boxes size={18} />Assets</button><div className="nav-submenu"><button className={section === 'accessories' ? 'active' : ''} onClick={() => setSection('accessories')}><Cable size={17} />Accessories</button></div><button className={section === 'people' ? 'active' : ''} onClick={() => setSection('people')}><Users size={18} />People</button></nav><div className="sidebar-profile"><div className="profile-initials">{user.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</div><div className="profile-details"><strong>{user.name}</strong><small>{user.email}</small></div><button className="profile-settings" onClick={() => setChangingPassword(true)} title="Change password" aria-label="Change password"><Settings size={17} /></button><span className="profile-role">Superadmin</span><button className="profile-signout" onClick={signOut} title="Sign out"><LogOut size={14} /> Sign out</button></div></aside><div className="workspace"><main>{section === 'assets' && <Assets revision={revision} reload={reload} />}{section === 'accessories' && <Accessories saved={reload} />}{section === 'people' && <People revision={revision} reload={reload} />}{section === 'checkouts' && <Checkouts revision={revision} reload={reload} />}</main></div>{changingPassword && <PasswordDialog close={() => setChangingPassword(false)} />}</div></ToastProvider>
 }

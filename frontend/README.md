@@ -20,7 +20,8 @@ The production build is generated with `pnpm build` in `dist/`. The office web s
 
 ## Screen and code map
 
-- **Assets:** searchable inventory by unique name. The Superadmin can record included accessories from a shared checklist, manage checklist options, and update asset status.
+- **Assets:** searchable inventory by unique name. The Superadmin can record included accessories from the shared checklist and update asset status.
+- **Accessories:** a dedicated sidebar submenu page for adding, renaming, and deleting shared accessory options.
 - **People:** reusable recipient contacts with required name and phone number.
 - **Checkouts:** search for an existing person or register a new recipient inside the creation dialog, then issue one asset per checkout. Issue another asset as a separate checkout, even for the same person. The Superadmin can edit an active checkout, confirm accessories on return, resolve missing accessories, and view activity history. Filters include item status and issue date range.
 
