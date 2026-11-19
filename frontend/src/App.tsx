@@ -177,22 +177,24 @@ function AssetForm({ asset, close, saved }: { asset: Asset | null; close: () => 
 function Accessories({ saved }: { saved: () => void }) {
   const toast = useToast()
   const [options, setOptions] = useState<AccessoryOption[]>([])
+  const [q, setQ] = useState('')
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
   async function reloadOptions() {
     setOptions(await allPages<AccessoryOption>('/accessories/'))
   }
   useEffect(() => { allPages<AccessoryOption>('/accessories/').then(setOptions).catch((reason: unknown) => setError(String(reason))) }, [])
   async function createOption(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError('')
-    try { await api('/accessories/', { method: 'POST', body: JSON.stringify({ name }) }); setName(''); await reloadOptions(); toast('Accessory option added.'); saved() }
+    try { await api('/accessories/', { method: 'POST', body: JSON.stringify({ name }) }); setName(''); await reloadOptions(); toast('Accessory option added.'); setAdding(false); saved() }
     catch (reason) { const message = errorMessage(reason instanceof Error ? reason.message : reason); setError(message); toast(message, 'error') } finally { setBusy(false) }
   }
   async function updateOption(option: AccessoryOption, nextName: string) {
     setError('')
-    try { await api(`/accessories/${option.id}/`, { method: 'PATCH', body: JSON.stringify({ name: nextName }) }); await reloadOptions(); toast('Accessory option updated.'); saved() }
-    catch (reason) { const message = errorMessage(reason instanceof Error ? reason.message : reason); setError(message); toast(message, 'error') }
+    try { await api(`/accessories/${option.id}/`, { method: 'PATCH', body: JSON.stringify({ name: nextName }) }); await reloadOptions(); toast('Accessory option updated.'); saved(); return true }
+    catch (reason) { const message = errorMessage(reason instanceof Error ? reason.message : reason); setError(message); toast(message, 'error'); return false }
   }
   async function deleteOption(option: AccessoryOption) {
     if (!window.confirm(`Delete ${option.name}? It must first be removed from every asset that uses it.`)) return
@@ -200,21 +202,28 @@ function Accessories({ saved }: { saved: () => void }) {
     try { await api(`/accessories/${option.id}/`, { method: 'DELETE' }); await reloadOptions(); toast('Accessory option deleted.'); saved() }
     catch (reason) { const message = errorMessage(reason instanceof Error ? reason.message : reason); setError(message); toast(message, 'error') }
   }
+  const filteredOptions = options.filter(option => option.name.toLocaleLowerCase().includes(q.trim().toLocaleLowerCase()))
   return <>
-    <PageHeader title="Accessories" description="Manage shared accessory options available to assign to assets." />
-    {error && <Notice>{error}</Notice>}
+    <PageHeader title="Accessories" description="Manage shared accessory options available to assign to assets." action={<button className="primary" onClick={() => { setName(''); setError(''); setAdding(true) }}><Plus size={17} /> Add accessory</button>} />
+    {!adding && error && <Notice>{error}</Notice>}
     <div className="panel accessory-management-page">
-      <form className="accessory-create" onSubmit={createOption}><Field label="New accessory option"><input required value={name} onChange={e => setName(e.target.value)} placeholder="For example, Power cable" /></Field><button className="primary" disabled={busy}><Plus size={16} /> Add option</button></form>
-      <div className="accessory-option-list">{options.map(option => <AccessoryOptionRow key={option.id} option={option} save={updateOption} remove={deleteOption} />)}</div>
+      <div className="search"><Search size={18} /><input aria-label="Search accessories" placeholder="Search by name" value={q} onChange={e => setQ(e.target.value)} />{q && <button type="button" className="search-clear" aria-label="Clear accessory search" title="Clear search" onClick={() => setQ('')}><X size={16} /></button>}</div>
+      {filteredOptions.length > 0 && <div className="table-wrap"><table><thead><tr><th>Accessory</th><th>Actions</th></tr></thead><tbody>{filteredOptions.map(option => <AccessoryOptionRow key={option.id} option={option} save={updateOption} remove={deleteOption} />)}</tbody></table></div>}
+      {options.length > 0 && !filteredOptions.length && <p className="empty">No accessories match “{q.trim()}”.</p>}
       {!options.length && !error && <p className="empty">No accessory options found.</p>}
     </div>
+    {adding && <div className="overlay" role="presentation" onClick={event => { if (event.target === event.currentTarget && !busy) setAdding(false) }}><div className="dialog" role="dialog" aria-modal="true" aria-label="Add accessory"><div className="dialog-head"><h2>Add accessory</h2><button type="button" disabled={busy} onClick={() => setAdding(false)} aria-label="Close">×</button></div><form className="form-stack" onSubmit={createOption}>{error && <Notice>{error}</Notice>}<Field label="Accessory name"><input required autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="For example, Power cable" /></Field><div className="form-actions"><button type="button" disabled={busy} onClick={() => setAdding(false)}>Cancel</button><button className="primary" disabled={busy || !name.trim()}><Plus size={16} /> {busy ? 'Adding…' : 'Add accessory'}</button></div></form></div></div>}
   </>
 }
 
-function AccessoryOptionRow({ option, save, remove }: { option: AccessoryOption; save: (option: AccessoryOption, name: string) => Promise<void>; remove: (option: AccessoryOption) => Promise<void> }) {
+function AccessoryOptionRow({ option, save, remove }: { option: AccessoryOption; save: (option: AccessoryOption, name: string) => Promise<boolean>; remove: (option: AccessoryOption) => Promise<void> }) {
   const [name, setName] = useState(option.name)
+  const [editing, setEditing] = useState(false)
   const hasNameChange = name.trim() !== option.name
-  return <div className="accessory-option-row"><input aria-label={`Accessory name ${option.name}`} value={name} onChange={e => setName(e.target.value)} /><button disabled={!hasNameChange || !name.trim()} onClick={() => save(option, name)}>Save</button><button className="icon-delete" onClick={() => remove(option)} aria-label={`Delete ${option.name}`} title="Delete accessory"><Trash2 size={15} /></button></div>
+  async function submitSave() {
+    if (hasNameChange && name.trim() && await save(option, name.trim())) setEditing(false)
+  }
+  return <tr><td>{editing ? <input aria-label={`Accessory name ${option.name}`} autoFocus value={name} onChange={e => setName(e.target.value)} /> : option.name}</td><td className="row-actions">{editing ? <><button type="button" className="text-button action-edit" disabled={!hasNameChange || !name.trim()} onClick={submitSave}>Save</button><button type="button" className="text-button" onClick={() => { setName(option.name); setEditing(false) }}>Cancel</button></> : <button type="button" className="text-button" onClick={() => setEditing(true)}>Edit</button>}<button type="button" className="text-button destructive" onClick={() => remove(option)}><Trash2 size={14} /> Delete</button></td></tr>
 }
 
 function People({ revision, reload }: { revision: number; reload: () => void }) {
